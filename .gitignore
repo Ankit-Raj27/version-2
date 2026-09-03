@@ -1,0 +1,35 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# environment / secrets
+.env
+.env.*
+!.env.example
+
+# builds
+.next/
+dist/
+coverage/
+*.tsbuildinfo
+
+# local data and credentials
+data/*
+!data/.gitkeep
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+**/auth/
+**/auth_info/
+**/whatsapp-auth/
+
+# logs
+*.log
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
