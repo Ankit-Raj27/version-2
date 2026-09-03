@@ -33,3 +33,6 @@ data/*
 Thumbs.db
 .vscode/
 .idea/
+
+# WhatsApp / Baileys auth
+data/whatsapp-auth/

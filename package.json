@@ -16,5 +16,9 @@
     "db:migrate": "pnpm --filter @personal-ai/server run db:migrate",
     "db:studio": "pnpm --filter @personal-ai/server run db:studio",
     "verify": "pnpm typecheck && pnpm test && pnpm build && pnpm db:migrate"
+  },
+  "dependencies": {
+    "@hapi/boom": "^10.0.1",
+    "@whiskeysockets/baileys": "7.0.0-rc14"
   }
 }

@@ -10,7 +10,12 @@ const rawEnvSchema = z.object({
   SERVER_HOST: z.string().min(1).default("127.0.0.1"),
   SERVER_PORT: z.coerce.number().int().min(1).max(65535).default(3001),
   DATABASE_URL: z.string().min(1).optional(),
-  LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info")
+  LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
+  WHATSAPP_ENABLED: z.coerce.boolean().default(true),
+  WHATSAPP_AUTH_DIR: z.string().min(1).default('../../data/whatsapp-auth'),
+  WHATSAPP_KILL_SWITCH: z.coerce.boolean().default(true)
+  
+
 });
 
 const parsed = rawEnvSchema.safeParse(process.env);
@@ -28,3 +33,4 @@ export const env = {
   ...parsed.data,
   DATABASE_URL: databaseUrl
 };
+
