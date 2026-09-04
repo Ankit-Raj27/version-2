@@ -1,5 +1,6 @@
 import { buildApp } from "./app.js";
 import { env } from "./config/env.js";
+import { runMigrations } from "./db/migrate.js";
 import { logger } from "./logger.js";
 import { whatsappService } from './whatsapp/whatsapp.service.js';
 
@@ -23,10 +24,10 @@ async function shutdown(signal: string) {
     logger.info('Server shutdown complete');
 
     process.exit(0);
-  } catch (error) {
+  } catch (err) {
     logger.error(
       {
-        error,
+        err,
       },
       'Error during server shutdown',
     );
@@ -44,21 +45,13 @@ process.on('SIGTERM', () => {
 });
 
 try {
+  runMigrations();
+
   await app.listen({
     host: env.SERVER_HOST,
     port: env.SERVER_PORT
   });
   await whatsappService.start();
-  setTimeout(() => {
-  void whatsappService
-    .sendText(
-      '916201562166@s.whatsapp.net',
-      'Phase 1 send test',
-    )
-    .catch((error) => {
-      logger.error({ error }, 'WhatsApp send test failed');
-    });
-}, 5_000);
 } catch (error) {
   app.log.fatal({ err: error }, "server failed to start");
   process.exitCode = 1;

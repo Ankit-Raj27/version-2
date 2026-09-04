@@ -3,6 +3,9 @@ import path from 'node:path';
 import { Boom } from '@hapi/boom';
 import makeWASocket, {
   DisconnectReason,
+  isJidBroadcast,
+  isJidNewsletter,
+  isJidStatusBroadcast,
   type WASocket,
   useMultiFileAuthState,
 } from '@whiskeysockets/baileys';
@@ -10,6 +13,8 @@ import qrcode from 'qrcode-terminal';
 
 import { env } from '../config/env.js';
 import { logger } from '../logger.js';
+import { persistMessage } from '../messaging/persistence.js';
+import { normalizeWhatsAppMessage } from './normalize.js';
 
 import type {
   WhatsAppConnectionState,
@@ -69,18 +74,11 @@ export class WhatsAppService {
   }
 
   async sendText(jid: string, text: string): Promise<void> {
-     logger.info(
-    {
-      killSwitch: env.WHATSAPP_KILL_SWITCH,
-    },
-    'Checking WhatsApp kill switch',
-  );
     if (env.WHATSAPP_KILL_SWITCH) {
       throw new Error(
         'WhatsApp sending blocked: global kill switch is enabled',
       );
     }
-    
 
     if (!this.socket || this.connectionState !== 'connected') {
       throw new Error('WhatsApp is not connected');
@@ -185,50 +183,45 @@ export class WhatsAppService {
           continue;
         }
 
-        // Groups are explicitly OFF during the MVP.
-        if (jid.endsWith('@g.us')) {
-          logger.debug(
-            { jid },
-            'Ignoring WhatsApp group message',
-          );
-
-          continue;
-        }
-
-        // WhatsApp system/broadcast messages are not part of Phase 1.
+        // Broadcast, status, and newsletter events are not conversations.
         if (
-          jid === 'status@broadcast' ||
-          jid.endsWith('@broadcast')
+          isJidStatusBroadcast(jid) ||
+          isJidBroadcast(jid) ||
+          isJidNewsletter(jid)
         ) {
           continue;
         }
 
-        const text =
-          message.message?.conversation ??
-          message.message?.extendedTextMessage?.text ??
-          null;
+        try {
+          const normalized = normalizeWhatsAppMessage(message);
 
-        if (!text) {
-          logger.debug(
+          if (!normalized) {
+            logger.debug(
+              { jid, messageId: message.key.id },
+              'Skipping non-persistable WhatsApp event',
+            );
+            continue;
+          }
+
+          const result = persistMessage(normalized);
+
+          logger.info(
             {
-              jid,
-              messageId: message.key.id,
+              externalMessageId: normalized.externalMessageId,
+              externalConversationId:
+                normalized.externalConversationId,
+              direction: normalized.direction,
+              messageType: normalized.type,
+              status: result.status,
             },
-            'Ignoring non-text WhatsApp message',
+            'WhatsApp message persisted',
           );
-
-          continue;
+        } catch (err) {
+          logger.error(
+            { err, jid, messageId: message.key.id },
+            'Failed to persist WhatsApp message',
+          );
         }
-
-        logger.info(
-          {
-            jid,
-            messageId: message.key.id,
-            fromMe: message.key.fromMe ?? false,
-            text,
-          },
-          'WhatsApp text message received',
-        );
       }
     });
   }
@@ -256,7 +249,7 @@ export class WhatsAppService {
     logger.warn(
       {
         statusCode,
-        error,
+        err: error,
       },
       'WhatsApp connection closed',
     );
@@ -276,10 +269,10 @@ export class WhatsAppService {
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
 
-      void this.connect().catch((error) => {
+      void this.connect().catch((err) => {
         logger.error(
           {
-            error,
+            err,
           },
           'WhatsApp reconnect failed',
         );

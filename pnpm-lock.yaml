@@ -14,6 +14,9 @@ importers:
       '@whiskeysockets/baileys':
         specifier: 7.0.0-rc14
         version: 7.0.0-rc14(sharp@0.35.4(@types/node@24.1.0))
+      personal-ai:
+        specifier: 'link:'
+        version: 'link:'
 
   apps/dashboard:
     dependencies:

@@ -8,6 +8,13 @@
       "when": 1788454097170,
       "tag": "0000_premium_crystal",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1788504985973,
+      "tag": "0001_optimal_tigra",
+      "breakpoints": true
     }
   ]
 }

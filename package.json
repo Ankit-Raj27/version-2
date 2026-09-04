@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
-    "@whiskeysockets/baileys": "7.0.0-rc14"
+    "@whiskeysockets/baileys": "7.0.0-rc14",
+    "personal-ai": "link:"
   }
 }
