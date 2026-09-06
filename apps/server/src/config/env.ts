@@ -9,6 +9,7 @@ const rawEnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   SERVER_HOST: z.string().min(1).default("127.0.0.1"),
   SERVER_PORT: z.coerce.number().int().min(1).max(65535).default(3001),
+  DASHBOARD_ORIGIN: z.url().default("http://localhost:3000"),
   DATABASE_URL: z.string().min(1).optional(),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   WHATSAPP_ENABLED: z.stringbool().default(true),

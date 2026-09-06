@@ -14,6 +14,7 @@ import qrcode from 'qrcode-terminal';
 import { env } from '../config/env.js';
 import { logger } from '../logger.js';
 import { persistMessage } from '../messaging/persistence.js';
+import { publish } from '../realtime/event-bus.js';
 import { normalizeWhatsAppMessage } from './normalize.js';
 
 import type {
@@ -61,7 +62,7 @@ export class WhatsAppService {
       this.socket = null;
     }
 
-    this.connectionState = 'disconnected';
+    this.setConnectionState('disconnected');
 
     logger.info('WhatsApp transport stopped');
   }
@@ -103,7 +104,7 @@ export class WhatsAppService {
   }
 
   private async connect(): Promise<void> {
-    this.connectionState = 'connecting';
+    this.setConnectionState('connecting');
 
     const authDirectory = path.resolve(
       process.cwd(),
@@ -149,7 +150,7 @@ export class WhatsAppService {
       } = update;
 
       if (qr) {
-        this.connectionState = 'qr';
+        this.setConnectionState('qr');
 
         logger.info(
           'WhatsApp QR received. Scan it from WhatsApp Linked Devices.',
@@ -161,7 +162,7 @@ export class WhatsAppService {
       }
 
       if (connection === 'open') {
-        this.connectionState = 'connected';
+        this.setConnectionState('connected');
 
         logger.info('WhatsApp connection opened');
       }
@@ -205,6 +206,18 @@ export class WhatsAppService {
 
           const result = persistMessage(normalized);
 
+          if (
+            result.status === 'inserted' &&
+            result.conversationId !== undefined &&
+            result.messageId !== undefined
+          ) {
+            publish({
+              type: 'message.created',
+              conversationId: result.conversationId,
+              messageId: result.messageId,
+            });
+          }
+
           logger.info(
             {
               externalMessageId: normalized.externalMessageId,
@@ -235,7 +248,7 @@ export class WhatsAppService {
         : undefined;
 
     if (statusCode === DisconnectReason.loggedOut) {
-      this.connectionState = 'logged_out';
+      this.setConnectionState('logged_out');
 
       logger.warn(
         'WhatsApp session was logged out. QR authentication is required again.',
@@ -244,7 +257,7 @@ export class WhatsAppService {
       return;
     }
 
-    this.connectionState = 'disconnected';
+    this.setConnectionState('disconnected');
 
     logger.warn(
       {
@@ -280,6 +293,19 @@ export class WhatsAppService {
         this.scheduleReconnect();
       });
     }, 3_000);
+  }
+
+  private setConnectionState(next: WhatsAppConnectionState): void {
+    if (next === this.connectionState) {
+      return;
+    }
+
+    this.connectionState = next;
+    publish({
+      type: 'whatsapp.status',
+      state: next,
+      connected: next === 'connected',
+    });
   }
 }
 
