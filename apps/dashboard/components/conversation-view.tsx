@@ -2,7 +2,8 @@
 
 import { useEffect, useRef } from "react";
 import { dayKey, formatDateSeparator } from "../lib/format";
-import type { MessagePageResponse } from "../lib/types";
+import type { Draft, MessagePageResponse } from "../lib/types";
+import { DraftPanel } from "./draft-panel";
 import { MessageBubble } from "./message-bubble";
 
 function MessageSkeleton() {
@@ -20,6 +21,7 @@ export function ConversationView({
   page,
   error,
   loadingOlder,
+  draft,
   onBack,
   onRetry,
   onLoadOlder
@@ -28,6 +30,7 @@ export function ConversationView({
   page: MessagePageResponse | null;
   error: string | null;
   loadingOlder: boolean;
+  draft: Draft | null;
   onBack: () => void;
   onRetry: () => void;
   onLoadOlder: () => Promise<void>;
@@ -148,6 +151,7 @@ export function ConversationView({
           })}
         </div>
       </div>
+      <DraftPanel draft={draft} />
     </section>
   );
 }

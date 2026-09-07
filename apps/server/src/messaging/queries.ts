@@ -2,6 +2,7 @@ import { and, desc, eq, lt, or } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { contacts, conversations, messages } from "../db/schema.js";
 import { formatJid, resolveConversationTitle } from "./display.js";
+import type { MessageDirection, NormalizedMessageType } from "./message.types.js";
 import type {
   ConversationSummary,
   ConversationView,
@@ -178,4 +179,92 @@ export function listMessages(
     hasMore,
     oldest: oldest ? { timestamp: oldest.timestamp, id: oldest.id } : null
   };
+}
+
+export interface ConversationContactInfo {
+  contactId: number;
+  jid: string;
+  displayName: string | null;
+  relationship: string | null;
+  notes: string | null;
+}
+
+export function getConversationContact(
+  conversationId: number
+): ConversationContactInfo | null {
+  const row = db
+    .select({
+      contactId: contacts.id,
+      jid: contacts.whatsappJid,
+      displayName: contacts.displayName,
+      relationship: contacts.relationship,
+      notes: contacts.notes
+    })
+    .from(conversations)
+    .innerJoin(contacts, eq(conversations.contactId, contacts.id))
+    .where(eq(conversations.id, conversationId))
+    .get();
+
+  return row ?? null;
+}
+
+export interface ContextMessageRow {
+  id: number;
+  direction: MessageDirection;
+  type: NormalizedMessageType;
+  text: string | null;
+  timestamp: number;
+  quotedText: string | null;
+  hasUnresolvedQuote: boolean;
+  baileysContentType: string | null;
+}
+
+/**
+ * Bounded by SQL LIMIT, not filtered in JS afterward — full history is never
+ * fetched, only the most recent `limit` rows. Returned oldest-first.
+ */
+export function getRecentMessagesForContext(
+  conversationId: number,
+  limit: number
+): ContextMessageRow[] {
+  const rows = db
+    .select({
+      id: messages.id,
+      direction: messages.direction,
+      type: messages.type,
+      text: messages.text,
+      timestamp: messages.timestamp,
+      quotedMessageId: messages.quotedMessageId,
+      quotedExternalMessageId: messages.quotedExternalMessageId,
+      metadata: messages.metadata
+    })
+    .from(messages)
+    .where(eq(messages.conversationId, conversationId))
+    .orderBy(desc(messages.timestamp), desc(messages.id))
+    .limit(limit)
+    .all();
+
+  return rows
+    .map((row) => {
+      const quoted = row.quotedMessageId
+        ? db
+            .select({ type: messages.type, text: messages.text })
+            .from(messages)
+            .where(eq(messages.id, row.quotedMessageId))
+            .get()
+        : undefined;
+      const metadata = row.metadata as { baileysContentType?: string } | null;
+
+      return {
+        id: row.id,
+        direction: row.direction,
+        type: row.type,
+        text: row.text,
+        timestamp: row.timestamp.getTime(),
+        quotedText: quoted ? messagePreview(quoted.type, quoted.text) : null,
+        hasUnresolvedQuote: row.quotedMessageId === null && row.quotedExternalMessageId !== null,
+        baileysContentType: metadata?.baileysContentType ?? null
+      };
+    })
+    .reverse();
 }

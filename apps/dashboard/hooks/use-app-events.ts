@@ -2,11 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getServerBaseUrl } from "../lib/api";
-import type { StreamState, WhatsAppConnectionState } from "../lib/types";
+import type { DraftStatus, StreamState, WhatsAppConnectionState } from "../lib/types";
 
 interface EventCallbacks {
   onMessageCreated: (event: { conversationId: number; messageId: number }) => void;
   onStatus: (event: { state: WhatsAppConnectionState; connected: boolean }) => void;
+  onDraftUpdated: (event: {
+    conversationId: number;
+    draftId: number;
+    status: DraftStatus;
+  }) => void;
   onOpen: () => void;
 }
 
@@ -46,6 +51,18 @@ export function useAppEvents(callbacks: EventCallbacks): StreamState {
           connected: boolean;
         };
         callbacksRef.current.onStatus(event);
+      } catch {
+        setStreamState("reconnecting");
+      }
+    });
+    source.addEventListener("draft.updated", (rawEvent) => {
+      try {
+        const event = JSON.parse(rawEvent.data) as {
+          conversationId: number;
+          draftId: number;
+          status: DraftStatus;
+        };
+        callbacksRef.current.onDraftUpdated(event);
       } catch {
         setStreamState("reconnecting");
       }

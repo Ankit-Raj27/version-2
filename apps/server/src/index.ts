@@ -1,8 +1,11 @@
+import { expireStaleGenerating } from "./agent/drafting/draft.repository.js";
 import { buildApp } from "./app.js";
 import { env } from "./config/env.js";
 import { runMigrations } from "./db/migrate.js";
 import { logger } from "./logger.js";
 import { whatsappService } from './whatsapp/whatsapp.service.js';
+
+const STALE_DRAFT_THRESHOLD_MS = 5 * 60 * 1000;
 
 const app = await buildApp();
 let shuttingDown = false;
@@ -46,6 +49,12 @@ process.on('SIGTERM', () => {
 
 try {
   runMigrations();
+
+  const swept = expireStaleGenerating(STALE_DRAFT_THRESHOLD_MS);
+
+  if (swept > 0) {
+    logger.warn({ swept }, 'Marked interrupted drafts as failed');
+  }
 
   await app.listen({
     host: env.SERVER_HOST,

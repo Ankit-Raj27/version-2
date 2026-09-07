@@ -1,5 +1,6 @@
 import type {
   ConversationListResponse,
+  DraftResponse,
   MessageCursor,
   MessagePageResponse,
   SystemStatus
@@ -71,4 +72,8 @@ export function getMessages(
 
 export function getSystemStatus(signal?: AbortSignal) {
   return getJson<SystemStatus>("/api/system/status", signal);
+}
+
+export function getDraft(conversationId: number, signal?: AbortSignal) {
+  return getJson<DraftResponse>(`/api/conversations/${conversationId}/draft`, signal);
 }

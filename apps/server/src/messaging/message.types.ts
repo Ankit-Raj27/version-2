@@ -51,8 +51,10 @@ export interface NormalizedMessage {
   metadata: NormalizedMessageMetadata;
 }
 
+export type PersistOutcome = "inserted" | "deduped" | "skipped";
+
 export interface PersistResult {
-  status: "inserted" | "deduped" | "skipped";
+  status: PersistOutcome;
   messageId?: number;
   conversationId?: number;
   reason?: string;

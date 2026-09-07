@@ -13,7 +13,7 @@ import qrcode from 'qrcode-terminal';
 
 import { env } from '../config/env.js';
 import { logger } from '../logger.js';
-import { persistMessage } from '../messaging/persistence.js';
+import { handleInboundMessage } from '../messaging/inbound-pipeline.js';
 import { publish } from '../realtime/event-bus.js';
 import { normalizeWhatsAppMessage } from './normalize.js';
 
@@ -204,31 +204,7 @@ export class WhatsAppService {
             continue;
           }
 
-          const result = persistMessage(normalized);
-
-          if (
-            result.status === 'inserted' &&
-            result.conversationId !== undefined &&
-            result.messageId !== undefined
-          ) {
-            publish({
-              type: 'message.created',
-              conversationId: result.conversationId,
-              messageId: result.messageId,
-            });
-          }
-
-          logger.info(
-            {
-              externalMessageId: normalized.externalMessageId,
-              externalConversationId:
-                normalized.externalConversationId,
-              direction: normalized.direction,
-              messageType: normalized.type,
-              status: result.status,
-            },
-            'WhatsApp message persisted',
-          );
+          handleInboundMessage(normalized);
         } catch (err) {
           logger.error(
             { err, jid, messageId: message.key.id },

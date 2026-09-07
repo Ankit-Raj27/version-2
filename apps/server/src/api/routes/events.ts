@@ -16,6 +16,14 @@ export function formatSseEvent(event: AppEvent): string {
     })}\n\n`;
   }
 
+  if (event.type === "draft.updated") {
+    return `event: ${event.type}\ndata: ${JSON.stringify({
+      conversationId: event.conversationId,
+      draftId: event.draftId,
+      status: event.status
+    })}\n\n`;
+  }
+
   return `event: ${event.type}\ndata: ${JSON.stringify({
     state: event.state,
     connected: event.connected

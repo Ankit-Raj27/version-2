@@ -3,9 +3,10 @@
 import { useCallback, useMemo, useState } from "react";
 import { useAppEvents } from "../hooks/use-app-events";
 import { useConversations } from "../hooks/use-conversations";
+import { useDraft } from "../hooks/use-draft";
 import { useMessages } from "../hooks/use-messages";
 import { useSystemStatus } from "../hooks/use-system-status";
-import type { WhatsAppConnectionState } from "../lib/types";
+import type { DraftStatus, WhatsAppConnectionState } from "../lib/types";
 import { ConversationList } from "./conversation-list";
 import { ConversationView } from "./conversation-view";
 import { StatusBar } from "./status-bar";
@@ -15,6 +16,7 @@ export function Dashboard() {
   const [unreadIds, setUnreadIds] = useState<Set<number>>(() => new Set());
   const conversations = useConversations();
   const messages = useMessages(selectedId);
+  const draft = useDraft(selectedId);
   const system = useSystemStatus();
 
   const selectConversation = useCallback((id: number) => {
@@ -39,13 +41,30 @@ export function Dashboard() {
       onStatus: (event: { state: WhatsAppConnectionState; connected: boolean }) => {
         system.updateWhatsApp(event);
       },
+      onDraftUpdated: (event: {
+        conversationId: number;
+        draftId: number;
+        status: DraftStatus;
+      }) => {
+        if (event.conversationId === selectedId) {
+          void draft.refetch();
+        }
+      },
       onOpen: () => {
         void conversations.refetch();
         void messages.refetch();
+        void draft.refetch();
         void system.refetch();
       }
     }),
-    [conversations.refetch, messages.refetch, selectedId, system.refetch, system.updateWhatsApp]
+    [
+      conversations.refetch,
+      draft.refetch,
+      messages.refetch,
+      selectedId,
+      system.refetch,
+      system.updateWhatsApp
+    ]
   );
   const streamState = useAppEvents(eventCallbacks);
   const backendError = conversations.error && !conversations.conversations;
@@ -72,6 +91,7 @@ export function Dashboard() {
           page={messages.page}
           error={messages.error}
           loadingOlder={messages.loadingOlder}
+          draft={draft.draft}
           onBack={() => setSelectedId(null)}
           onRetry={() => void messages.refetch()}
           onLoadOlder={messages.loadOlder}

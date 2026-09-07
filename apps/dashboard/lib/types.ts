@@ -69,3 +69,20 @@ export interface SystemStatus {
 }
 
 export type StreamState = "connecting" | "live" | "reconnecting";
+
+export type DraftStatus = "generating" | "ready" | "failed";
+
+export interface Draft {
+  id: number;
+  status: DraftStatus;
+  generatedText: string | null;
+  model: string | null;
+  promptVersion: string;
+  latencyMs: number | null;
+  errorKind: string | null;
+  createdAt: string;
+}
+
+export interface DraftResponse {
+  draft: Draft | null;
+}

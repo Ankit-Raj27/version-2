@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
+import { getLatestDraftForConversation } from "../../agent/drafting/draft.repository.js";
 import {
   getConversation,
   listConversations,
@@ -95,5 +96,48 @@ export async function registerConversationRoutes(
     );
 
     return { conversation, ...page };
+  });
+
+  app.get("/conversations/:id/draft", async (request, reply) => {
+    const params = z.object({ id: idSchema }).safeParse(request.params);
+
+    if (!params.success) {
+      return sendError(
+        reply,
+        400,
+        "INVALID_CONVERSATION_ID",
+        "Conversation id must be a positive integer"
+      );
+    }
+
+    const conversation = getConversation(params.data.id);
+
+    if (!conversation) {
+      return sendError(
+        reply,
+        404,
+        "CONVERSATION_NOT_FOUND",
+        `Conversation ${params.data.id} does not exist`
+      );
+    }
+
+    const draft = getLatestDraftForConversation(conversation.id);
+
+    if (!draft) {
+      return { draft: null };
+    }
+
+    return {
+      draft: {
+        id: draft.id,
+        status: draft.status,
+        generatedText: draft.generatedText,
+        model: draft.model,
+        promptVersion: draft.promptVersion,
+        latencyMs: draft.latencyMs,
+        errorKind: draft.errorKind,
+        createdAt: draft.createdAt.toISOString()
+      }
+    };
   });
 }

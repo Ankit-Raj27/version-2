@@ -115,3 +115,47 @@ export const messages = sqliteTable(
     )
   ]
 );
+
+export const drafts = sqliteTable(
+  "drafts",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    conversationId: integer("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    triggerMessageId: integer("trigger_message_id")
+      .notNull()
+      .references(() => messages.id, { onDelete: "cascade" }),
+
+    status: text("status", { enum: ["generating", "ready", "failed"] }).notNull(),
+    generatedText: text("generated_text"),
+
+    model: text("model"),
+    promptVersion: text("prompt_version").notNull(),
+
+    inputTokens: integer("input_tokens"),
+    outputTokens: integer("output_tokens"),
+    totalTokens: integer("total_tokens"),
+    reasoningTokens: integer("reasoning_tokens"),
+    cachedInputTokens: integer("cached_input_tokens"),
+    latencyMs: integer("latency_ms"),
+    contextMessageCount: integer("context_message_count"),
+
+    errorKind: text("error_kind"),
+    errorMessage: text("error_message"),
+
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date())
+  },
+  (table) => [
+    uniqueIndex("drafts_trigger_message_unique").on(table.triggerMessageId),
+    index("drafts_conversation_created_idx").on(
+      table.conversationId,
+      table.createdAt
+    )
+  ]
+);
