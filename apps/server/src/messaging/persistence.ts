@@ -23,6 +23,9 @@ export function persistMessage(message: NormalizedMessage): PersistResult {
           whatsappJid: party.jid,
           altJid: party.altJid ?? null,
           displayName: party.displayName ?? null,
+          // Phase 7 safe defaults: a newly discovered contact never enters the AI
+          // drafting pipeline until a human explicitly enables it.
+          relationship: "UNKNOWN",
           replyMode: "OFF"
         })
         .onConflictDoNothing({ target: contacts.whatsappJid })

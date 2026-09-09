@@ -6,6 +6,7 @@ import type { NormalizedMessage } from "../../messaging/message.types.js";
 import { findMessageAfter, getConversationContact, getMessageById } from "../../messaging/queries.js";
 import { publish } from "../../realtime/event-bus.js";
 import { buildDraftContext } from "../context/context.builder.js";
+import { resolveContactPolicy } from "../policies/contact-policy.js";
 import { CURRENT_REPLY_DRAFT } from "../prompts/reply-draft/index.js";
 import { promptVersionOf } from "../prompts/prompt.types.js";
 import { completeDraft, failDraft, markSuperseded, reserveDraft } from "./draft.repository.js";
@@ -136,6 +137,29 @@ export async function onMessagePersisted(input: {
     logger.debug(
       { reason: eligibility.reason, triggerMessageId: input.triggerMessageId },
       "Draft generation skipped"
+    );
+    return;
+  }
+
+  // Deterministic contact policy gate. Evaluated here — after persistence, before any AI
+  // request — so an OFF/unknown contact never has its message sent to the AI provider.
+  const policy = resolveContactPolicy({
+    relationship: contact?.relationship ?? null,
+    replyMode: contact?.replyMode ?? null,
+    conversationType: input.message.conversationType
+  });
+
+  if (policy.action !== "draft") {
+    logger.info(
+      {
+        contactId: contact?.contactId ?? null,
+        conversationId: input.conversationId,
+        messageId: input.triggerMessageId,
+        relationship: contact?.relationship ?? null,
+        replyMode: contact?.replyMode ?? null,
+        reason: policy.reason
+      },
+      "Contact policy skipped drafting"
     );
     return;
   }

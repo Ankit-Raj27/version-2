@@ -7,7 +7,7 @@ import { db } from "../src/db/client.js";
 import { contacts, conversations, drafts, messages } from "../src/db/schema.js";
 import { persistMessage } from "../src/messaging/persistence.js";
 import { whatsappService } from "../src/whatsapp/whatsapp.service.js";
-import { makeMessage, makeReadyDraft } from "./factories.js";
+import { makeMessage, makeReadyDraft, setConversationContactPolicy } from "./factories.js";
 
 const { env } = await import("../src/config/env.js");
 
@@ -115,6 +115,34 @@ describe("checkDraftSendability", () => {
       sendable: false,
       reason: "already_replied"
     });
+  });
+
+  it("flags a draft whose contact was switched off after generation", () => {
+    const { draft, conversationId } = makeReadyDraft();
+    setConversationContactPolicy(conversationId, { relationship: "FRIEND", replyMode: "OFF" });
+
+    expect(checkDraftSendability(getDraftById(draft.id)!)).toEqual({
+      sendable: false,
+      reason: "contact_policy_off"
+    });
+  });
+
+  it("flags a draft whose contact was reset to an unknown relationship", () => {
+    const { draft, conversationId } = makeReadyDraft();
+    setConversationContactPolicy(conversationId, { relationship: "UNKNOWN", replyMode: "DRAFT" });
+
+    expect(checkDraftSendability(getDraftById(draft.id)!)).toEqual({
+      sendable: false,
+      reason: "contact_policy_off"
+    });
+  });
+
+  it("becomes sendable again when the contact is switched back to draft", () => {
+    const { draft, conversationId } = makeReadyDraft();
+    setConversationContactPolicy(conversationId, { relationship: "FRIEND", replyMode: "OFF" });
+    setConversationContactPolicy(conversationId, { relationship: "FRIEND", replyMode: "DRAFT" });
+
+    expect(checkDraftSendability(getDraftById(draft.id)!)).toEqual({ sendable: true });
   });
 
   it("flags a disconnected WhatsApp transport", () => {

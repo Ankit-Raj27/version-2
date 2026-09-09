@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "../src/db/client.js";
 import { contacts, conversations, drafts, messages } from "../src/db/schema.js";
 import { persistMessage } from "../src/messaging/persistence.js";
-import { makeMessage as makeMessageBase } from "./factories.js";
+import { makeMessage as makeMessageBase, setConversationContactPolicy } from "./factories.js";
 import type { NormalizedMessage } from "../src/messaging/message.types.js";
 
 function makeMessage(overrides: Partial<NormalizedMessage> = {}): NormalizedMessage {
@@ -51,6 +51,7 @@ describe("onMessagePersisted", () => {
     completeMock.mockResolvedValue(aiResult());
 
     const message = persistMessage(makeMessage());
+    setConversationContactPolicy(message.conversationId!);
     const events: unknown[] = [];
     const unsubscribe = subscribe((event) => events.push(event));
 
@@ -83,6 +84,7 @@ describe("onMessagePersisted", () => {
     completeMock.mockResolvedValue(aiResult({ text: "not json" }));
 
     const message = persistMessage(makeMessage());
+    setConversationContactPolicy(message.conversationId!);
     await onMessagePersisted({
       message: makeMessage(),
       conversationId: message.conversationId!,
@@ -113,6 +115,7 @@ describe("onMessagePersisted", () => {
     completeMock.mockResolvedValue(aiResult());
 
     const message = persistMessage(makeMessage());
+    setConversationContactPolicy(message.conversationId!);
     await Promise.all([
       onMessagePersisted({
         message: makeMessage(),
@@ -131,6 +134,7 @@ describe("onMessagePersisted", () => {
 
   it("supersedes a draft when a newer message arrives while the AI is generating", async () => {
     const message = persistMessage(makeMessage());
+    setConversationContactPolicy(message.conversationId!);
     const conversationId = message.conversationId!;
 
     // Simulate a newer incoming message landing mid-generation.
@@ -161,6 +165,7 @@ describe("onMessagePersisted", () => {
     completeMock.mockRejectedValue(new Error("boom"));
 
     const message = persistMessage(makeMessage());
+    setConversationContactPolicy(message.conversationId!);
     await onMessagePersisted({
       message: makeMessage(),
       conversationId: message.conversationId!,

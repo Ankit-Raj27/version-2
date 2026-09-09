@@ -3,12 +3,34 @@ import { z } from "zod";
 import { getLatestDraftForConversation } from "../../agent/drafting/draft.repository.js";
 import { toDraftView } from "../../agent/drafting/draft.view.js";
 import {
+  getContactByConversation,
+  updateContactSettings
+} from "../../messaging/contacts.js";
+import {
   getConversation,
   listConversations,
   listMessages
 } from "../../messaging/queries.js";
+import { RELATIONSHIPS, REPLY_MODES } from "../../db/schema.js";
 
 const idSchema = z.coerce.number().int().positive();
+
+const MAX_CONTACT_NOTES_LENGTH = 2000;
+const MAX_CONTACT_DISPLAY_NAME_LENGTH = 200;
+
+const updateContactSchema = z
+  .object({
+    displayName: z
+      .string()
+      .trim()
+      .min(1)
+      .max(MAX_CONTACT_DISPLAY_NAME_LENGTH)
+      .optional(),
+    relationship: z.enum(RELATIONSHIPS).optional(),
+    replyMode: z.enum(REPLY_MODES).optional(),
+    notes: z.string().max(MAX_CONTACT_NOTES_LENGTH).nullable().optional()
+  })
+  .strict();
 const conversationQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(100)
 });
@@ -129,5 +151,79 @@ export async function registerConversationRoutes(
     }
 
     return { draft: toDraftView(draft) };
+  });
+
+  app.get("/conversations/:id/contact", async (request, reply) => {
+    const params = z.object({ id: idSchema }).safeParse(request.params);
+
+    if (!params.success) {
+      return sendError(
+        reply,
+        400,
+        "INVALID_CONVERSATION_ID",
+        "Conversation id must be a positive integer"
+      );
+    }
+
+    const contact = getContactByConversation(params.data.id);
+
+    if (!contact) {
+      return sendError(
+        reply,
+        404,
+        "CONTACT_NOT_FOUND",
+        `Conversation ${params.data.id} has no editable contact`
+      );
+    }
+
+    return { contact };
+  });
+
+  app.patch("/conversations/:id/contact", async (request, reply) => {
+    const params = z.object({ id: idSchema }).safeParse(request.params);
+
+    if (!params.success) {
+      return sendError(
+        reply,
+        400,
+        "INVALID_CONVERSATION_ID",
+        "Conversation id must be a positive integer"
+      );
+    }
+
+    const body = updateContactSchema.safeParse(request.body ?? {});
+
+    if (!body.success) {
+      return sendError(
+        reply,
+        400,
+        "INVALID_CONTACT_UPDATE",
+        "Contact update contains unknown or invalid fields"
+      );
+    }
+
+    const contact = getContactByConversation(params.data.id);
+
+    if (!contact) {
+      return sendError(
+        reply,
+        404,
+        "CONTACT_NOT_FOUND",
+        `Conversation ${params.data.id} has no editable contact`
+      );
+    }
+
+    const updated = updateContactSettings(contact.id, body.data);
+
+    if (!updated) {
+      return sendError(
+        reply,
+        404,
+        "CONTACT_NOT_FOUND",
+        `Contact ${contact.id} no longer exists`
+      );
+    }
+
+    return { contact: updated };
   });
 }

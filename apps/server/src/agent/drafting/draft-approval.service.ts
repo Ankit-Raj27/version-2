@@ -29,6 +29,7 @@ export type DraftActionErrorCode =
   | "DRAFT_STALE_NEWER_MESSAGE"
   | "DRAFT_STALE_MANUAL_REPLY"
   | "DRAFT_STALE_ALREADY_REPLIED"
+  | "DRAFT_STALE_CONTACT_POLICY"
   | "WHATSAPP_DISCONNECTED"
   | "KILL_SWITCH_ENABLED"
   | "WHATSAPP_SEND_FAILED";
@@ -49,6 +50,7 @@ const REASON_CODES: Record<StaleReason, DraftActionErrorCode> = {
   newer_incoming_message: "DRAFT_STALE_NEWER_MESSAGE",
   manual_reply_detected: "DRAFT_STALE_MANUAL_REPLY",
   already_replied: "DRAFT_STALE_ALREADY_REPLIED",
+  contact_policy_off: "DRAFT_STALE_CONTACT_POLICY",
   whatsapp_disconnected: "WHATSAPP_DISCONNECTED",
   kill_switch_enabled: "KILL_SWITCH_ENABLED"
 };
@@ -65,6 +67,7 @@ const REASON_MESSAGES: Record<StaleReason, string> = {
   newer_incoming_message: "A newer message has arrived in this conversation",
   manual_reply_detected: "You already replied to this from your phone",
   already_replied: "Another reply has already been sent for this message",
+  contact_policy_off: "This contact is no longer set to draft replies",
   whatsapp_disconnected: "WhatsApp is not connected",
   kill_switch_enabled: "Sending is disabled by the kill switch"
 };

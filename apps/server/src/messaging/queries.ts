@@ -186,6 +186,7 @@ export interface ConversationContactInfo {
   jid: string;
   displayName: string | null;
   relationship: string | null;
+  replyMode: string;
   notes: string | null;
 }
 
@@ -198,6 +199,7 @@ export function getConversationContact(
       jid: contacts.whatsappJid,
       displayName: contacts.displayName,
       relationship: contacts.relationship,
+      replyMode: contacts.replyMode,
       notes: contacts.notes
     })
     .from(conversations)

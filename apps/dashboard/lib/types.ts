@@ -96,3 +96,42 @@ export interface Draft {
 export interface DraftResponse {
   draft: Draft | null;
 }
+
+// Contact policy (Phase 7). Canonical values live in apps/server/src/db/schema.ts;
+// kept in sync here by hand, matching this file's wire-contract convention.
+export const RELATIONSHIPS = [
+  "UNKNOWN",
+  "FAMILY",
+  "FRIEND",
+  "WORK",
+  "ACQUAINTANCE",
+  "OTHER"
+] as const;
+export type Relationship = (typeof RELATIONSHIPS)[number];
+
+export const REPLY_MODES = ["OFF", "DRAFT", "AUTO_SAFE", "AUTO"] as const;
+export type ReplyMode = (typeof REPLY_MODES)[number];
+
+/** Reply modes a human can actually select in Phase 7. AUTO_SAFE / AUTO are stored
+ * for forward compatibility but never activate autonomous sending. */
+export const SELECTABLE_REPLY_MODES: ReplyMode[] = ["OFF", "DRAFT"];
+
+export interface Contact {
+  id: number;
+  whatsappJid: string;
+  displayName: string | null;
+  relationship: Relationship;
+  replyMode: ReplyMode;
+  notes: string | null;
+}
+
+export interface ContactResponse {
+  contact: Contact;
+}
+
+export interface ContactUpdate {
+  displayName?: string;
+  relationship?: Relationship;
+  replyMode?: ReplyMode;
+  notes?: string | null;
+}

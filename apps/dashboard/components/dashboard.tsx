@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { useAppEvents } from "../hooks/use-app-events";
+import { useContact } from "../hooks/use-contact";
 import { useConversations } from "../hooks/use-conversations";
 import { useDraft } from "../hooks/use-draft";
 import { useMessages } from "../hooks/use-messages";
@@ -17,6 +18,7 @@ export function Dashboard() {
   const conversations = useConversations();
   const messages = useMessages(selectedId);
   const draft = useDraft(selectedId);
+  const contact = useContact(selectedId);
   const system = useSystemStatus();
 
   const selectConversation = useCallback((id: number) => {
@@ -94,12 +96,16 @@ export function Dashboard() {
           draft={draft.draft}
           draftPending={draft.pending}
           draftActionError={draft.actionError}
+          contact={contact.contact}
+          contactSaving={contact.saving}
+          contactError={contact.error}
           onBack={() => setSelectedId(null)}
           onRetry={() => void messages.refetch()}
           onLoadOlder={messages.loadOlder}
           onApproveDraft={draft.approve}
           onRegenerateDraft={draft.regenerate}
           onIgnoreDraft={draft.ignore}
+          onSaveContact={contact.save}
         />
       </div>
     </main>

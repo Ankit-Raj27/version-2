@@ -8,6 +8,23 @@ import {
   type AnySQLiteColumn
 } from "drizzle-orm/sqlite-core";
 
+// Single source of truth for contact-policy enum values (Phase 7). The dashboard mirrors
+// these in apps/dashboard/lib/types.ts, matching the existing wire-contract convention.
+// Casing is uppercase to match the pre-existing reply_mode column values.
+export const RELATIONSHIPS = [
+  "UNKNOWN",
+  "FAMILY",
+  "FRIEND",
+  "WORK",
+  "ACQUAINTANCE",
+  "OTHER"
+] as const;
+
+export const REPLY_MODES = ["OFF", "DRAFT", "AUTO_SAFE", "AUTO"] as const;
+
+export type Relationship = (typeof RELATIONSHIPS)[number];
+export type ReplyMode = (typeof REPLY_MODES)[number];
+
 export const appMetadata = sqliteTable("app_metadata", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
@@ -23,12 +40,11 @@ export const contacts = sqliteTable(
     whatsappJid: text("whatsapp_jid").notNull(),
     altJid: text("alt_jid"),
     displayName: text("display_name"),
-    relationship: text("relationship"),
-    replyMode: text("reply_mode", {
-      enum: ["OFF", "DRAFT", "AUTO_SAFE", "AUTO"]
-    })
-      .notNull()
-      .default("OFF"),
+    // Nullable at the DB level (legacy rows predate Phase 7); migration 0004 backfills
+    // NULL/unrecognised values to 'UNKNOWN' and new contacts are written 'UNKNOWN'
+    // explicitly. The contact policy treats null/unknown as UNKNOWN (fail-closed).
+    relationship: text("relationship", { enum: RELATIONSHIPS }),
+    replyMode: text("reply_mode", { enum: REPLY_MODES }).notNull().default("OFF"),
     notes: text("notes"),
     styleProfile: text("style_profile", { mode: "json" }),
     createdAt: integer("created_at", { mode: "timestamp_ms" })

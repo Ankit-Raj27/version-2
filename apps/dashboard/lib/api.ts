@@ -1,4 +1,6 @@
 import type {
+  ContactResponse,
+  ContactUpdate,
   ConversationListResponse,
   DraftResponse,
   MessageCursor,
@@ -44,9 +46,13 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   return (await response.json()) as T;
 }
 
-async function postJson<T>(path: string, payload: unknown): Promise<T> {
+async function sendJson<T>(
+  path: string,
+  method: "POST" | "PATCH",
+  payload: unknown
+): Promise<T> {
   const response = await fetch(`${serverBaseUrl}${path}`, {
-    method: "POST",
+    method,
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(payload)
   });
@@ -61,6 +67,10 @@ async function postJson<T>(path: string, payload: unknown): Promise<T> {
   }
 
   return (await response.json()) as T;
+}
+
+function postJson<T>(path: string, payload: unknown): Promise<T> {
+  return sendJson<T>(path, "POST", payload);
 }
 
 export function getServerBaseUrl(): string {
@@ -110,4 +120,12 @@ export function regenerateDraft(conversationId: number, draftId: number) {
 
 export function ignoreDraft(conversationId: number, draftId: number) {
   return postJson<DraftResponse>(`/api/conversations/${conversationId}/drafts/${draftId}/ignore`, {});
+}
+
+export function getContact(conversationId: number, signal?: AbortSignal) {
+  return getJson<ContactResponse>(`/api/conversations/${conversationId}/contact`, signal);
+}
+
+export function updateContact(conversationId: number, patch: ContactUpdate) {
+  return sendJson<ContactResponse>(`/api/conversations/${conversationId}/contact`, "PATCH", patch);
 }
