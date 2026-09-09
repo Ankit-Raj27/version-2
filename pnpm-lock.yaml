@@ -6,7 +6,17 @@ settings:
 
 importers:
 
-  .: {}
+  .:
+    dependencies:
+      '@fastify/cors':
+        specifier: 11.3.0
+        version: 11.3.0
+      fastify:
+        specifier: 5.12.1
+        version: 5.12.1
+      personal-ai:
+        specifier: 'link:'
+        version: 'link:'
 
   apps/dashboard:
     dependencies:

@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import { getLatestDraftForConversation } from "../../agent/drafting/draft.repository.js";
+import { toDraftView } from "../../agent/drafting/draft.view.js";
 import {
   getConversation,
   listConversations,
@@ -127,17 +128,6 @@ export async function registerConversationRoutes(
       return { draft: null };
     }
 
-    return {
-      draft: {
-        id: draft.id,
-        status: draft.status,
-        generatedText: draft.generatedText,
-        model: draft.model,
-        promptVersion: draft.promptVersion,
-        latencyMs: draft.latencyMs,
-        errorKind: draft.errorKind,
-        createdAt: draft.createdAt.toISOString()
-      }
-    };
+    return { draft: toDraftView(draft) };
   });
 }

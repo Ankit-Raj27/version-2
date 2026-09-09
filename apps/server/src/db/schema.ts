@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   index,
   integer,
@@ -127,8 +128,19 @@ export const drafts = sqliteTable(
       .notNull()
       .references(() => messages.id, { onDelete: "cascade" }),
 
-    status: text("status", { enum: ["generating", "ready", "failed"] }).notNull(),
+    status: text("status", {
+      enum: ["generating", "ready", "sending", "sent", "failed", "ignored", "superseded"]
+    }).notNull(),
     generatedText: text("generated_text"),
+    // The text actually approved to send: equals generatedText unless the user edited it
+    // before sending. Set on every approval attempt (including failed sends) so an
+    // in-progress edit survives a reverted send; generatedText itself is never mutated
+    // after generation, preserving pure AI output for later style comparison.
+    finalText: text("final_text"),
+    sentMessageId: integer("sent_message_id").references(
+      (): AnySQLiteColumn => messages.id,
+      { onDelete: "set null" }
+    ),
 
     model: text("model"),
     promptVersion: text("prompt_version").notNull(),
@@ -141,6 +153,11 @@ export const drafts = sqliteTable(
     latencyMs: integer("latency_ms"),
     contextMessageCount: integer("context_message_count"),
 
+    // Doubles as the last-action error: on a `failed` draft this describes the AI
+    // generation failure; on a `ready` draft it describes the most recent failed send
+    // attempt (cleared on the next successful transition). A `ready` draft is never
+    // reachable with a stale value already set, since only failDraft() and the send-revert
+    // path write these columns.
     errorKind: text("error_kind"),
     errorMessage: text("error_message"),
 
@@ -152,7 +169,12 @@ export const drafts = sqliteTable(
       .$defaultFn(() => new Date())
   },
   (table) => [
-    uniqueIndex("drafts_trigger_message_unique").on(table.triggerMessageId),
+    // Partial: at most one non-superseded draft per trigger message. Regenerating marks
+    // the old row 'superseded' before inserting the replacement, so this index enforces
+    // "only one live/terminal draft per trigger" without blocking that insert.
+    uniqueIndex("drafts_trigger_active_uq")
+      .on(table.triggerMessageId)
+      .where(sql`${table.status} != 'superseded'`),
     index("drafts_conversation_created_idx").on(
       table.conversationId,
       table.createdAt

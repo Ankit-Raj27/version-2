@@ -44,6 +44,25 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   return (await response.json()) as T;
 }
 
+async function postJson<T>(path: string, payload: unknown): Promise<T> {
+  const response = await fetch(`${serverBaseUrl}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as ApiErrorPayload;
+    throw new ApiError(
+      body.error?.message ?? `Request failed with status ${response.status}`,
+      response.status,
+      body.error?.code ?? null
+    );
+  }
+
+  return (await response.json()) as T;
+}
+
 export function getServerBaseUrl(): string {
   return serverBaseUrl;
 }
@@ -76,4 +95,19 @@ export function getSystemStatus(signal?: AbortSignal) {
 
 export function getDraft(conversationId: number, signal?: AbortSignal) {
   return getJson<DraftResponse>(`/api/conversations/${conversationId}/draft`, signal);
+}
+
+export function approveDraft(conversationId: number, draftId: number, editedText?: string) {
+  return postJson<DraftResponse>(
+    `/api/conversations/${conversationId}/drafts/${draftId}/approve`,
+    editedText !== undefined ? { editedText } : {}
+  );
+}
+
+export function regenerateDraft(conversationId: number, draftId: number) {
+  return postJson<DraftResponse>(`/api/conversations/${conversationId}/drafts/${draftId}/regenerate`, {});
+}
+
+export function ignoreDraft(conversationId: number, draftId: number) {
+  return postJson<DraftResponse>(`/api/conversations/${conversationId}/drafts/${draftId}/ignore`, {});
 }

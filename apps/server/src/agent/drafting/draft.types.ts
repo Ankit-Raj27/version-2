@@ -1,4 +1,11 @@
-export type DraftStatus = "generating" | "ready" | "failed";
+export type DraftStatus =
+  | "generating"
+  | "ready"
+  | "sending"
+  | "sent"
+  | "failed"
+  | "ignored"
+  | "superseded";
 
 export interface DraftRow {
   id: number;
@@ -6,6 +13,8 @@ export interface DraftRow {
   triggerMessageId: number;
   status: DraftStatus;
   generatedText: string | null;
+  finalText: string | null;
+  sentMessageId: number | null;
   model: string | null;
   promptVersion: string;
   inputTokens: number | null;

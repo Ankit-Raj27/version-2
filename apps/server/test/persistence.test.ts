@@ -76,6 +76,35 @@ describe("persistMessage", () => {
     expect(db.select().from(messages).all()).toHaveLength(1);
   });
 
+  it("a later Baileys echo of our own AI-sent message never overwrites its origin", () => {
+    const sent = persistMessage(
+      makeMessage({
+        externalMessageId: "wa-outgoing-1",
+        direction: "outgoing",
+        origin: "AI_APPROVED",
+        sender: null,
+        text: "sure, see you then"
+      })
+    );
+    expect(sent.status).toBe("inserted");
+
+    // Same WhatsApp message id, as Baileys would replay it as a 'notify' echo.
+    const echo = persistMessage(
+      makeMessage({
+        externalMessageId: "wa-outgoing-1",
+        direction: "outgoing",
+        origin: "USER_PHONE",
+        sender: null,
+        text: "sure, see you then"
+      })
+    );
+
+    expect(echo).toMatchObject({ status: "deduped", messageId: sent.messageId });
+    const rows = db.select().from(messages).where(eq(messages.conversationId, sent.conversationId!)).all();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.origin).toBe("AI_APPROVED");
+  });
+
   it("stores outgoing phone messages with no sender contact", () => {
     persistMessage(
       makeMessage({

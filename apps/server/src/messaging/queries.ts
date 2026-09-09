@@ -1,8 +1,8 @@
-import { and, desc, eq, lt, or } from "drizzle-orm";
+import { and, asc, desc, eq, gt, lt, or } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { contacts, conversations, messages } from "../db/schema.js";
 import { formatJid, resolveConversationTitle } from "./display.js";
-import type { MessageDirection, NormalizedMessageType } from "./message.types.js";
+import type { MessageDirection, MessageOrigin, NormalizedMessageType } from "./message.types.js";
 import type {
   ConversationSummary,
   ConversationView,
@@ -267,4 +267,75 @@ export function getRecentMessagesForContext(
       };
     })
     .reverse();
+}
+
+export interface MessageIdentity {
+  id: number;
+  conversationId: number;
+  timestamp: number;
+}
+
+export function getMessageById(id: number): MessageIdentity | null {
+  const row = db
+    .select({
+      id: messages.id,
+      conversationId: messages.conversationId,
+      timestamp: messages.timestamp
+    })
+    .from(messages)
+    .where(eq(messages.id, id))
+    .get();
+
+  return row ? { id: row.id, conversationId: row.conversationId, timestamp: row.timestamp.getTime() } : null;
+}
+
+export interface MessageAfterCursor {
+  id: number;
+  direction: MessageDirection;
+  origin: MessageOrigin;
+  timestamp: number;
+}
+
+/**
+ * The earliest message strictly after the given (timestamp, id) cursor, or null if the
+ * trigger is still the most recent message. Used by draft-sendability to detect that the
+ * conversation has moved on (a newer incoming message, a manual phone reply, or another
+ * approved AI reply) since a draft's trigger message.
+ */
+export function findMessageAfter(
+  conversationId: number,
+  after: { timestamp: number; id: number }
+): MessageAfterCursor | null {
+  const afterTimestamp = new Date(after.timestamp);
+  const row = db
+    .select({
+      id: messages.id,
+      direction: messages.direction,
+      origin: messages.origin,
+      timestamp: messages.timestamp
+    })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.conversationId, conversationId),
+        or(
+          gt(messages.timestamp, afterTimestamp),
+          and(eq(messages.timestamp, afterTimestamp), gt(messages.id, after.id))
+        )
+      )
+    )
+    .orderBy(asc(messages.timestamp), asc(messages.id))
+    .limit(1)
+    .get();
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    direction: row.direction,
+    origin: row.origin,
+    timestamp: row.timestamp.getTime()
+  };
 }

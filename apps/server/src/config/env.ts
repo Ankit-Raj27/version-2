@@ -21,7 +21,7 @@ const rawEnvSchema = z
     AI_DRAFTING_ENABLED: z.stringbool().default(false),
     AI_API_KEY: z.string().min(1).optional(),
     AI_API_BASE_URL: z.url().default("https://api.openai.com/v1"),
-    AI_MODEL: z.string().min(1).default("gpt-4o-mini"),
+    AI_MODEL: z.string().min(1).default("gpt-5.6-luna"),
     AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
     AI_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().default(512),
     AI_TEMPERATURE: z.coerce.number().min(0).max(2).default(0.6),
@@ -30,8 +30,13 @@ const rawEnvSchema = z
     AI_REASONING_EFFORT: z
       .enum(["", "minimal", "low", "medium", "high", "xhigh"])
       .default(""),
-    AI_CONTEXT_MESSAGE_LIMIT: z.coerce.number().int().min(10).max(30).default(20),
-    AI_DRAFT_ALLOWED_JIDS: z.string().default("")
+    AI_CONTEXT_MESSAGE_LIMIT: z.coerce.number().int().min(10).max(50).default(20),
+    AI_DRAFT_ALLOWED_JIDS: z.string().default(""),
+
+    // --- Phase 6: reliability ---
+    // A ready draft older than this can no longer be sent (the conversation has likely
+    // moved on); the dashboard offers a regenerate instead.
+    DRAFT_TTL_MS: z.coerce.number().int().positive().default(10 * 60 * 1000)
   })
   .superRefine((data, ctx) => {
     if (data.AI_DRAFTING_ENABLED && !data.AI_API_KEY) {

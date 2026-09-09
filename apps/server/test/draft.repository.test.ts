@@ -3,14 +3,22 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   completeDraft,
   expireStaleGenerating,
+  expireStaleSending,
   failDraft,
+  getDraftById,
   getLatestDraftForConversation,
-  reserveDraft
+  insertRegeneratedDraft,
+  markIgnored,
+  markSuperseded,
+  markSent,
+  reserveDraft,
+  reserveSend,
+  revertSendFailure
 } from "../src/agent/drafting/draft.repository.js";
 import { db } from "../src/db/client.js";
 import { contacts, conversations, drafts, messages } from "../src/db/schema.js";
 import { persistMessage } from "../src/messaging/persistence.js";
-import { makeMessage } from "./factories.js";
+import { makeMessage, makeReadyDraft } from "./factories.js";
 
 beforeEach(() => {
   db.delete(drafts).run();
@@ -142,5 +150,101 @@ describe("draft repository", () => {
     expect(swept).toBe(1);
     expect(getLatestDraftForConversation(old.conversationId!)?.status).toBe("failed");
     expect(getLatestDraftForConversation(recent.conversationId!)?.status).toBe("generating");
+  });
+
+  it("reserveSend moves ready -> sending and stores finalText, but only once", () => {
+    const { draft } = makeReadyDraft();
+
+    const reserved = reserveSend(draft.id, "final text");
+    expect(reserved).toMatchObject({ status: "sending", finalText: "final text" });
+
+    const second = reserveSend(draft.id, "final text");
+    expect(second).toBeNull();
+  });
+
+  it("markSent moves sending -> sent and clears error fields", () => {
+    const { draft, triggerMessageId } = makeReadyDraft();
+    reserveSend(draft.id, "final text");
+
+    // sentMessageId has an FK to messages.id; reuse the trigger message's row as a stand-in.
+    const sent = markSent(draft.id, triggerMessageId);
+    expect(sent).toMatchObject({
+      status: "sent",
+      sentMessageId: triggerMessageId,
+      errorKind: null,
+      errorMessage: null
+    });
+
+    expect(markSent(draft.id, triggerMessageId)).toBeNull();
+  });
+
+  it("revertSendFailure moves sending -> ready and records the failure", () => {
+    const { draft } = makeReadyDraft();
+    reserveSend(draft.id, "final text");
+
+    const reverted = revertSendFailure(draft.id, { errorKind: "send_failed", errorMessage: "boom" });
+    expect(reverted).toMatchObject({ status: "ready", errorKind: "send_failed", errorMessage: "boom" });
+
+    expect(revertSendFailure(draft.id, { errorKind: "send_failed", errorMessage: "boom" })).toBeNull();
+  });
+
+  it("markIgnored moves ready -> ignored exactly once", () => {
+    const { draft } = makeReadyDraft();
+
+    expect(markIgnored(draft.id)).toBe(true);
+    expect(getDraftById(draft.id)!.status).toBe("ignored");
+    expect(markIgnored(draft.id)).toBe(false);
+  });
+
+  it("markSuperseded only transitions from an allowed source status", () => {
+    const { draft } = makeReadyDraft();
+
+    expect(markSuperseded(draft.id, ["failed"])).toBe(false);
+    expect(markSuperseded(draft.id, ["ready"])).toBe(true);
+    expect(getDraftById(draft.id)!.status).toBe("superseded");
+  });
+
+  it("insertRegeneratedDraft supersedes the old row and inserts a fresh one for the same trigger", () => {
+    const { draft, triggerMessageId, conversationId } = makeReadyDraft();
+
+    const next = insertRegeneratedDraft({
+      oldDraftId: draft.id,
+      fromStatuses: ["ready", "failed"],
+      conversationId,
+      triggerMessageId,
+      promptVersion: "reply-draft@v1"
+    });
+
+    expect(next).toMatchObject({ status: "generating", triggerMessageId });
+    expect(getDraftById(draft.id)!.status).toBe("superseded");
+  });
+
+  it("insertRegeneratedDraft returns null when the old draft was already acted on", () => {
+    const { draft, triggerMessageId, conversationId } = makeReadyDraft();
+    markIgnored(draft.id);
+
+    const next = insertRegeneratedDraft({
+      oldDraftId: draft.id,
+      fromStatuses: ["ready", "failed"],
+      conversationId,
+      triggerMessageId,
+      promptVersion: "reply-draft@v1"
+    });
+
+    expect(next).toBeNull();
+  });
+
+  it("expireStaleSending fails interrupted sends older than the cutoff", () => {
+    const { draft } = makeReadyDraft();
+    reserveSend(draft.id, "final text");
+    db.update(drafts)
+      .set({ updatedAt: new Date(Date.now() - 60_000) })
+      .where(eq(drafts.id, draft.id))
+      .run();
+
+    const swept = expireStaleSending(30_000);
+
+    expect(swept).toBe(1);
+    expect(getDraftById(draft.id)).toMatchObject({ status: "failed", errorKind: "interrupted" });
   });
 });

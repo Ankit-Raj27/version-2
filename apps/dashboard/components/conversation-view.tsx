@@ -22,18 +22,28 @@ export function ConversationView({
   error,
   loadingOlder,
   draft,
+  draftPending,
+  draftActionError,
   onBack,
   onRetry,
-  onLoadOlder
+  onLoadOlder,
+  onApproveDraft,
+  onRegenerateDraft,
+  onIgnoreDraft
 }: {
   selectedId: number | null;
   page: MessagePageResponse | null;
   error: string | null;
   loadingOlder: boolean;
   draft: Draft | null;
+  draftPending: boolean;
+  draftActionError: string | null;
   onBack: () => void;
   onRetry: () => void;
   onLoadOlder: () => Promise<void>;
+  onApproveDraft: (editedText?: string) => void;
+  onRegenerateDraft: () => void;
+  onIgnoreDraft: () => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const previousConversationId = useRef<number | null>(null);
@@ -151,7 +161,14 @@ export function ConversationView({
           })}
         </div>
       </div>
-      <DraftPanel draft={draft} />
+      <DraftPanel
+        draft={draft}
+        pending={draftPending}
+        actionError={draftActionError}
+        onApprove={onApproveDraft}
+        onRegenerate={onRegenerateDraft}
+        onIgnore={onIgnoreDraft}
+      />
     </section>
   );
 }

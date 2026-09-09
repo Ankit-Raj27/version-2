@@ -129,6 +129,34 @@ describe("onMessagePersisted", () => {
     expect(completeMock).toHaveBeenCalledTimes(1);
   });
 
+  it("supersedes a draft when a newer message arrives while the AI is generating", async () => {
+    const message = persistMessage(makeMessage());
+    const conversationId = message.conversationId!;
+
+    // Simulate a newer incoming message landing mid-generation.
+    completeMock.mockImplementation(async () => {
+      persistMessage(
+        makeMessage({ externalMessageId: "arrived-during-generation", timestamp: Date.now() + 1_000 })
+      );
+      return aiResult();
+    });
+
+    const events: unknown[] = [];
+    const unsubscribe = subscribe((event) => events.push(event));
+
+    await onMessagePersisted({
+      message: makeMessage(),
+      conversationId,
+      triggerMessageId: message.messageId!
+    });
+    unsubscribe();
+
+    const draft = getLatestDraftForConversation(conversationId)!;
+    // Text is still persisted for analytics, but the draft is not sendable.
+    expect(draft).toMatchObject({ status: "superseded", generatedText: "sure, see you then" });
+    expect(events.map((e) => (e as { status: string }).status)).toEqual(["generating", "superseded"]);
+  });
+
   it("fails the draft when the AI client rejects with a non-AiError", async () => {
     completeMock.mockRejectedValue(new Error("boom"));
 

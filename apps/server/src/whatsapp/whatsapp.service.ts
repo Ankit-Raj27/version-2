@@ -18,6 +18,7 @@ import { publish } from '../realtime/event-bus.js';
 import { normalizeWhatsAppMessage } from './normalize.js';
 
 import type {
+  SentWhatsAppMessage,
   WhatsAppConnectionState,
   WhatsAppStatus,
 } from './whatsapp.types.js';
@@ -74,7 +75,7 @@ export class WhatsAppService {
     };
   }
 
-  async sendText(jid: string, text: string): Promise<void> {
+  async sendText(jid: string, text: string): Promise<SentWhatsAppMessage> {
     if (env.WHATSAPP_KILL_SWITCH) {
       throw new Error(
         'WhatsApp sending blocked: global kill switch is enabled',
@@ -91,9 +92,15 @@ export class WhatsAppService {
       throw new Error('Cannot send an empty WhatsApp message');
     }
 
-    await this.socket.sendMessage(jid, {
+    const sent = await this.socket.sendMessage(jid, {
       text: trimmedText,
     });
+
+    const externalMessageId = sent?.key?.id;
+
+    if (!externalMessageId) {
+      throw new Error('WhatsApp did not return a message id for the sent message');
+    }
 
     logger.info(
       {
@@ -101,6 +108,8 @@ export class WhatsAppService {
       },
       'WhatsApp text message sent',
     );
+
+    return { externalMessageId, timestamp: Date.now() };
   }
 
   private async connect(): Promise<void> {

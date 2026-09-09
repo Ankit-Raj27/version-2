@@ -1,6 +1,7 @@
-import cors from "@fastify/cors";
+import cors from "@fastify/cors"
 import Fastify from "fastify";
 import { registerConversationRoutes } from "./api/routes/conversations.js";
+import { registerDraftActionRoutes } from "./api/routes/draft-actions.js";
 import { closeAllSseClients, registerEventRoute } from "./api/routes/events.js";
 import { registerHealthRoute } from "./api/routes/health.js";
 import { registerSystemRoute } from "./api/routes/system.js";
@@ -17,6 +18,7 @@ export async function buildApp() {
   await app.register(registerHealthRoute);
   await app.register(registerSystemRoute, { prefix: "/api" });
   await app.register(registerConversationRoutes, { prefix: "/api" });
+  await app.register(registerDraftActionRoutes, { prefix: "/api" });
   await app.register(registerEventRoute, { prefix: "/api" });
 
   app.addHook("onClose", async () => {

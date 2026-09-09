@@ -92,9 +92,14 @@ export function Dashboard() {
           error={messages.error}
           loadingOlder={messages.loadingOlder}
           draft={draft.draft}
+          draftPending={draft.pending}
+          draftActionError={draft.actionError}
           onBack={() => setSelectedId(null)}
           onRetry={() => void messages.refetch()}
           onLoadOlder={messages.loadOlder}
+          onApproveDraft={draft.approve}
+          onRegenerateDraft={draft.regenerate}
+          onIgnoreDraft={draft.ignore}
         />
       </div>
     </main>

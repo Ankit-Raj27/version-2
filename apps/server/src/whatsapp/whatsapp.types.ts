@@ -10,3 +10,8 @@ export interface WhatsAppStatus {
   state: WhatsAppConnectionState;
   connected: boolean;
 }
+
+export interface SentWhatsAppMessage {
+  externalMessageId: string;
+  timestamp: number;
+}
