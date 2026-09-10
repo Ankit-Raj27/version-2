@@ -6,6 +6,7 @@ import type { NormalizedMessage } from "../../messaging/message.types.js";
 import { findMessageAfter, getConversationContact, getMessageById } from "../../messaging/queries.js";
 import { publish } from "../../realtime/event-bus.js";
 import { buildDraftContext } from "../context/context.builder.js";
+import { maybeExtractMemory } from "../memory/memory.service.js";
 import { resolveContactPolicy } from "../policies/contact-policy.js";
 import { CURRENT_REPLY_DRAFT } from "../prompts/reply-draft/index.js";
 import { promptVersionOf } from "../prompts/prompt.types.js";
@@ -182,5 +183,14 @@ export async function onMessagePersisted(input: {
     draftId: draftRow.id,
     conversationId: input.conversationId,
     triggerMessageId: input.triggerMessageId
+  });
+
+  // Fire-and-forget: extraction must never delay or fail the draft.
+  void maybeExtractMemory({
+    conversationId: input.conversationId,
+    triggerMessageId: input.triggerMessageId,
+    conversationType: input.message.conversationType
+  }).catch((err) => {
+    logger.error({ err, conversationId: input.conversationId }, "Memory extraction failed");
   });
 }

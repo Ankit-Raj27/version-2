@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Contact, ContactUpdate, Relationship, ReplyMode } from "../lib/types";
+import type {
+  Contact,
+  ContactUpdate,
+  MemoryFact,
+  Relationship,
+  ReplyMode
+} from "../lib/types";
 import { RELATIONSHIPS, SELECTABLE_REPLY_MODES } from "../lib/types";
 
 const RELATIONSHIP_LABELS: Record<Relationship, string> = {
@@ -27,12 +33,20 @@ export function ContactSettings({
   contact,
   saving,
   error,
-  onSave
+  onSave,
+  facts,
+  factsPending,
+  factsError,
+  onFactAction
 }: {
   contact: Contact | null;
   saving: boolean;
   error: string | null;
   onSave: (patch: ContactUpdate) => void;
+  facts: MemoryFact[];
+  factsPending: boolean;
+  factsError: string | null;
+  onFactAction: (factId: number, action: "confirmed" | "rejected" | "delete") => void;
 }) {
   const [relationship, setRelationship] = useState<Relationship>("UNKNOWN");
   const [replyMode, setReplyMode] = useState<ReplyMode>("OFF");
@@ -141,7 +155,95 @@ export function ContactSettings({
         >
           {saving ? "Saving…" : "Save"}
         </button>
+
+        <MemoryFacts
+          facts={facts}
+          pending={factsPending}
+          error={factsError}
+          onAct={onFactAction}
+        />
       </div>
     </details>
+  );
+}
+
+function MemoryFacts({
+  facts,
+  pending,
+  error,
+  onAct
+}: {
+  facts: MemoryFact[];
+  pending: boolean;
+  error: string | null;
+  onAct: (factId: number, action: "confirmed" | "rejected" | "delete") => void;
+}) {
+  const proposed = facts.filter((fact) => fact.status === "proposed");
+  const confirmed = facts.filter((fact) => fact.status === "confirmed");
+
+  if (facts.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-2 border-t border-zinc-800 pt-3">
+      <span className="block font-semibold uppercase tracking-widest text-zinc-500 text-[10px]">
+        What the AI remembers
+      </span>
+
+      {proposed.length > 0 ? (
+        <div className="space-y-1.5">
+          <span className="block text-[10px] text-amber-500">
+            Suggested — not used until you confirm
+          </span>
+          {proposed.map((fact) => (
+            <div
+              key={fact.id}
+              className="space-y-1 rounded-md border border-amber-900/60 bg-amber-950/20 p-2"
+            >
+              <p className="text-[11px] text-zinc-300">{fact.fact}</p>
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => onAct(fact.id, "confirmed")}
+                  className="rounded border border-emerald-800 px-2 py-0.5 text-[10px] text-emerald-300 hover:bg-emerald-900/40 disabled:opacity-40"
+                >
+                  Confirm
+                </button>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => onAct(fact.id, "rejected")}
+                  className="rounded border border-zinc-700 px-2 py-0.5 text-[10px] text-zinc-400 hover:bg-zinc-900 disabled:opacity-40"
+                >
+                  Reject
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {confirmed.length > 0 ? (
+        <ul className="space-y-1">
+          {confirmed.map((fact) => (
+            <li key={fact.id} className="flex items-start gap-2">
+              <span className="flex-1 text-[11px] text-zinc-400">{fact.fact}</span>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => onAct(fact.id, "delete")}
+                className="text-[10px] text-zinc-600 hover:text-red-400 disabled:opacity-40"
+              >
+                Forget
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {error ? <p className="text-[11px] text-red-400">{error}</p> : null}
+    </div>
   );
 }

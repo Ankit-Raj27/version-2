@@ -14,7 +14,12 @@ export async function buildApp() {
     loggerInstance: logger
   });
 
-  await app.register(cors, { origin: env.DASHBOARD_ORIGIN });
+  // @fastify/cors defaults to GET,HEAD,POST — without PATCH/DELETE the browser blocks
+  // contact settings and fact review at preflight.
+  await app.register(cors, {
+    origin: env.DASHBOARD_ORIGIN,
+    methods: ["GET", "HEAD", "POST", "PATCH", "DELETE"]
+  });
   await app.register(registerHealthRoute);
   await app.register(registerSystemRoute, { prefix: "/api" });
   await app.register(registerConversationRoutes, { prefix: "/api" });

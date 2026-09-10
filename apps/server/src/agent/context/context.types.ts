@@ -11,6 +11,22 @@ export interface ContextMessage {
   quotedUnresolved: boolean;
 }
 
+import type { StyleExemplar } from "../../messaging/queries.js";
+
+export type { StyleExemplar };
+
+/**
+ * Measured from the user's own past replies in this conversation — habits the bounded
+ * transcript is too short to show reliably. Absent when there are too few samples to
+ * say anything honest.
+ */
+export interface StyleSnapshot {
+  sampleCount: number;
+  medianChars: number;
+  /** fraction of sampled replies containing at least one emoji, 0–1 */
+  emojiRatio: number;
+}
+
 export interface DraftContext {
   contact: {
     displayName: string | null;
@@ -31,9 +47,16 @@ export interface DraftContext {
     truncated: boolean;
   };
 
-  // ── reserved extension points — absent in Phase 4, do not populate ──
-  // style?:   StyleProfile      (Phase 8)
-  // memory?:  MemoryFact[]      (Phase 9)
-  // summary?: string            (Phase 9)
+  /** Phase 8. Absent when the conversation has too little outgoing history to measure. */
+  style?: StyleSnapshot | undefined;
+
+  /** Phase 9. Confirmed facts only — proposed and rejected ones never reach a prompt. */
+  memory?: string[] | undefined;
+
+  /** Phase 10. Real messages the user wrote, shown to the model as imitation targets. */
+  exemplars?: StyleExemplar[] | undefined;
+
+  // ── reserved extension points — do not populate ──
+  // summary?: string            (Phase 9, deferred)
   // risk?:    RiskAssessment    (Phase 10)
 }

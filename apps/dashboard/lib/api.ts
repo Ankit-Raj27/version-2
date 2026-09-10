@@ -3,6 +3,8 @@ import type {
   ContactUpdate,
   ConversationListResponse,
   DraftResponse,
+  MemoryFact,
+  MemoryFactsResponse,
   MessageCursor,
   MessagePageResponse,
   SystemStatus
@@ -128,4 +130,39 @@ export function getContact(conversationId: number, signal?: AbortSignal) {
 
 export function updateContact(conversationId: number, patch: ContactUpdate) {
   return sendJson<ContactResponse>(`/api/conversations/${conversationId}/contact`, "PATCH", patch);
+}
+
+export function getContactFacts(conversationId: number, signal?: AbortSignal) {
+  return getJson<MemoryFactsResponse>(
+    `/api/conversations/${conversationId}/contact/facts`,
+    signal
+  );
+}
+
+export function setContactFactStatus(
+  conversationId: number,
+  factId: number,
+  status: "confirmed" | "rejected"
+) {
+  return sendJson<{ fact: MemoryFact }>(
+    `/api/conversations/${conversationId}/contact/facts/${factId}`,
+    "PATCH",
+    { status }
+  );
+}
+
+export async function deleteContactFact(conversationId: number, factId: number) {
+  const response = await fetch(
+    `${serverBaseUrl}/api/conversations/${conversationId}/contact/facts/${factId}`,
+    { method: "DELETE", headers: { Accept: "application/json" } }
+  );
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as ApiErrorPayload;
+    throw new ApiError(
+      body.error?.message ?? `Request failed with status ${response.status}`,
+      response.status,
+      body.error?.code ?? null
+    );
+  }
 }

@@ -22,8 +22,11 @@ export const RELATIONSHIPS = [
 
 export const REPLY_MODES = ["OFF", "DRAFT", "AUTO_SAFE", "AUTO"] as const;
 
+export const MEMORY_FACT_STATUSES = ["proposed", "confirmed", "rejected"] as const;
+
 export type Relationship = (typeof RELATIONSHIPS)[number];
 export type ReplyMode = (typeof REPLY_MODES)[number];
+export type MemoryFactStatus = (typeof MEMORY_FACT_STATUSES)[number];
 
 export const appMetadata = sqliteTable("app_metadata", {
   key: text("key").primaryKey(),
@@ -72,6 +75,8 @@ export const conversations = sqliteTable(
     title: text("title"),
     summary: text("summary"),
     lastMessageAt: integer("last_message_at", { mode: "timestamp_ms" }),
+    // Highest message id seen by the last memory extraction; drives the rate limit.
+    lastMemoryMessageId: integer("last_memory_message_id"),
     createdAt: integer("created_at", { mode: "timestamp_ms" })
       .notNull()
       .$defaultFn(() => new Date())
@@ -195,5 +200,37 @@ export const drafts = sqliteTable(
       table.conversationId,
       table.createdAt
     )
+  ]
+);
+
+export const memoryFacts = sqliteTable(
+  "memory_facts",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    contactId: integer("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    fact: text("fact").notNull(),
+    // Only 'confirmed' reaches a prompt. 'rejected' rows are kept, not deleted, so the
+    // extractor can be told not to propose them again.
+    status: text("status", { enum: MEMORY_FACT_STATUSES })
+      .notNull()
+      .default("proposed"),
+    sourceMessageId: integer("source_message_id").references(
+      (): AnySQLiteColumn => messages.id,
+      { onDelete: "set null" }
+    ),
+    promptVersion: text("prompt_version").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date())
+  },
+  (table) => [
+    // Exact-string dedup only; paraphrases still slip through.
+    uniqueIndex("memory_facts_contact_fact_uq").on(table.contactId, table.fact),
+    index("memory_facts_contact_status_idx").on(table.contactId, table.status)
   ]
 );

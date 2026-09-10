@@ -3,6 +3,12 @@ import { z } from "zod";
 import { getLatestDraftForConversation } from "../../agent/drafting/draft.repository.js";
 import { toDraftView } from "../../agent/drafting/draft.view.js";
 import {
+  deleteFact,
+  listFacts,
+  setFactStatus,
+  toFactView
+} from "../../agent/memory/memory.repository.js";
+import {
   getContactByConversation,
   updateContactSettings
 } from "../../messaging/contacts.js";
@@ -46,6 +52,11 @@ const messageQuerySchema = z
     { message: "beforeTimestamp and beforeId must be provided together" }
   );
 
+const factParamsSchema = z.object({ id: idSchema, factId: idSchema });
+const updateFactSchema = z
+  .object({ status: z.enum(["confirmed", "rejected"]) })
+  .strict();
+
 function sendError(
   reply: FastifyReply,
   status: 400 | 404,
@@ -53,6 +64,34 @@ function sendError(
   message: string
 ) {
   return reply.code(status).send({ error: { code, message } });
+}
+
+function resolveContact(params: unknown, reply: FastifyReply) {
+  const parsed = z.object({ id: idSchema }).safeParse(params);
+
+  if (!parsed.success) {
+    sendError(
+      reply,
+      400,
+      "INVALID_CONVERSATION_ID",
+      "Conversation id must be a positive integer"
+    );
+    return null;
+  }
+
+  const contact = getContactByConversation(parsed.data.id);
+
+  if (!contact) {
+    sendError(
+      reply,
+      404,
+      "CONTACT_NOT_FOUND",
+      `Conversation ${parsed.data.id} has no editable contact`
+    );
+    return null;
+  }
+
+  return contact;
 }
 
 export async function registerConversationRoutes(
@@ -225,5 +264,68 @@ export async function registerConversationRoutes(
     }
 
     return { contact: updated };
+  });
+
+  app.get("/conversations/:id/contact/facts", async (request, reply) => {
+    const contact = resolveContact(request.params, reply);
+
+    if (!contact) {
+      return reply;
+    }
+
+    return { facts: listFacts(contact.id).map(toFactView) };
+  });
+
+  app.patch("/conversations/:id/contact/facts/:factId", async (request, reply) => {
+    const params = factParamsSchema.safeParse(request.params);
+
+    if (!params.success) {
+      return sendError(reply, 400, "INVALID_FACT_ID", "Fact id must be a positive integer");
+    }
+
+    const body = updateFactSchema.safeParse(request.body ?? {});
+
+    if (!body.success) {
+      return sendError(
+        reply,
+        400,
+        "INVALID_FACT_UPDATE",
+        "status must be 'confirmed' or 'rejected'"
+      );
+    }
+
+    const contact = resolveContact(request.params, reply);
+
+    if (!contact) {
+      return reply;
+    }
+
+    const updated = setFactStatus(contact.id, params.data.factId, body.data.status);
+
+    if (!updated) {
+      return sendError(reply, 404, "FACT_NOT_FOUND", `Fact ${params.data.factId} not found`);
+    }
+
+    return { fact: toFactView(updated) };
+  });
+
+  app.delete("/conversations/:id/contact/facts/:factId", async (request, reply) => {
+    const params = factParamsSchema.safeParse(request.params);
+
+    if (!params.success) {
+      return sendError(reply, 400, "INVALID_FACT_ID", "Fact id must be a positive integer");
+    }
+
+    const contact = resolveContact(request.params, reply);
+
+    if (!contact) {
+      return reply;
+    }
+
+    if (!deleteFact(contact.id, params.data.factId)) {
+      return sendError(reply, 404, "FACT_NOT_FOUND", `Fact ${params.data.factId} not found`);
+    }
+
+    return reply.code(204).send();
   });
 }

@@ -135,3 +135,18 @@ export interface ContactUpdate {
   replyMode?: ReplyMode;
   notes?: string | null;
 }
+
+// Memory facts (Phase 9). Only 'confirmed' facts are used when drafting.
+export type MemoryFactStatus = "proposed" | "confirmed" | "rejected";
+
+export interface MemoryFact {
+  id: number;
+  fact: string;
+  status: MemoryFactStatus;
+  sourceMessageId: number | null;
+  createdAt: string;
+}
+
+export interface MemoryFactsResponse {
+  facts: MemoryFact[];
+}

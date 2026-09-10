@@ -2,7 +2,13 @@
 
 import { useEffect, useRef } from "react";
 import { dayKey, formatDateSeparator } from "../lib/format";
-import type { Contact, ContactUpdate, Draft, MessagePageResponse } from "../lib/types";
+import type {
+  Contact,
+  ContactUpdate,
+  Draft,
+  MemoryFact,
+  MessagePageResponse
+} from "../lib/types";
 import { ContactSettings } from "./contact-settings";
 import { DraftPanel } from "./draft-panel";
 import { MessageBubble } from "./message-bubble";
@@ -28,13 +34,17 @@ export function ConversationView({
   contact,
   contactSaving,
   contactError,
+  facts,
+  factsPending,
+  factsError,
   onBack,
   onRetry,
   onLoadOlder,
   onApproveDraft,
   onRegenerateDraft,
   onIgnoreDraft,
-  onSaveContact
+  onSaveContact,
+  onFactAction
 }: {
   selectedId: number | null;
   page: MessagePageResponse | null;
@@ -46,6 +56,9 @@ export function ConversationView({
   contact: Contact | null;
   contactSaving: boolean;
   contactError: string | null;
+  facts: MemoryFact[];
+  factsPending: boolean;
+  factsError: string | null;
   onBack: () => void;
   onRetry: () => void;
   onLoadOlder: () => Promise<void>;
@@ -53,6 +66,7 @@ export function ConversationView({
   onRegenerateDraft: () => void;
   onIgnoreDraft: () => void;
   onSaveContact: (patch: ContactUpdate) => void;
+  onFactAction: (factId: number, action: "confirmed" | "rejected" | "delete") => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const previousConversationId = useRef<number | null>(null);
@@ -125,6 +139,10 @@ export function ConversationView({
           saving={contactSaving}
           error={contactError}
           onSave={onSaveContact}
+          facts={facts}
+          factsPending={factsPending}
+          factsError={factsError}
+          onFactAction={onFactAction}
         />
       </header>
 
