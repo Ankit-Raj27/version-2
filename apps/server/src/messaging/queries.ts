@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, lt, or } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, lt, or } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { contacts, conversations, messages } from "../db/schema.js";
 import { formatJid, resolveConversationTitle } from "./display.js";
@@ -186,6 +186,7 @@ export interface ConversationContactInfo {
   jid: string;
   displayName: string | null;
   relationship: string | null;
+  replyMode: string;
   notes: string | null;
 }
 
@@ -198,6 +199,7 @@ export function getConversationContact(
       jid: contacts.whatsappJid,
       displayName: contacts.displayName,
       relationship: contacts.relationship,
+      replyMode: contacts.replyMode,
       notes: contacts.notes
     })
     .from(conversations)
@@ -266,6 +268,92 @@ export function getRecentMessagesForContext(
         baileysContentType: metadata?.baileysContentType ?? null
       };
     })
+    .reverse();
+}
+
+// AI_APPROVED is excluded: it is verbatim model output, and counting it makes every
+// measurement of the user's style drift toward the model's own habits. AI_EDITED counts —
+// the stored text is what the user rewrote it to.
+const HUMAN_AUTHORED_ORIGINS = ["USER_PHONE", "AI_EDITED"] as const;
+
+function humanOutgoing(conversationId: number | null) {
+  return and(
+    conversationId === null ? undefined : eq(messages.conversationId, conversationId),
+    eq(messages.direction, "outgoing"),
+    eq(messages.type, "text"),
+    inArray(messages.origin, [...HUMAN_AUTHORED_ORIGINS])
+  );
+}
+
+/** Reaches further back than the prompt transcript, to catch habits it is too short to show. */
+export function getOutgoingTextSamples(
+  conversationId: number,
+  limit: number
+): string[] {
+  return db
+    .select({ text: messages.text })
+    .from(messages)
+    .where(humanOutgoing(conversationId))
+    .orderBy(desc(messages.timestamp), desc(messages.id))
+    .limit(limit)
+    .all()
+    .map((row) => row.text?.trim() ?? "")
+    .filter((text) => text.length > 0);
+}
+
+export interface StyleExemplar {
+  /** The message being replied to, when it can be paired. */
+  incoming: string | null;
+  reply: string;
+}
+
+/**
+ * Real (incoming -> user's reply) pairs, oldest last. `conversationId: null` draws from
+ * every conversation and omits the incoming side, so a thin contact can be topped up
+ * without leaking another contact's messages.
+ */
+export function getStyleExemplars(
+  conversationId: number | null,
+  limit: number
+): StyleExemplar[] {
+  const replies = db
+    .select({
+      conversationId: messages.conversationId,
+      text: messages.text,
+      timestamp: messages.timestamp
+    })
+    .from(messages)
+    .where(humanOutgoing(conversationId))
+    .orderBy(desc(messages.timestamp), desc(messages.id))
+    .limit(limit)
+    .all();
+
+  return replies
+    .map((row) => {
+      const prompted =
+        conversationId === null
+          ? undefined
+          : db
+              .select({ text: messages.text })
+              .from(messages)
+              .where(
+                and(
+                  eq(messages.conversationId, row.conversationId),
+                  eq(messages.direction, "incoming"),
+                  eq(messages.type, "text"),
+                  lt(messages.timestamp, row.timestamp)
+                )
+              )
+              .orderBy(desc(messages.timestamp), desc(messages.id))
+              .limit(1)
+              .get();
+
+      return {
+        incoming: prompted?.text?.trim() || null,
+        reply: row.text?.trim() ?? ""
+      };
+    })
+    .filter((exemplar) => exemplar.reply.length > 0)
     .reverse();
 }
 

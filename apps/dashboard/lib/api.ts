@@ -1,6 +1,10 @@
 import type {
+  ContactResponse,
+  ContactUpdate,
   ConversationListResponse,
   DraftResponse,
+  MemoryFact,
+  MemoryFactsResponse,
   MessageCursor,
   MessagePageResponse,
   SystemStatus
@@ -44,9 +48,13 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   return (await response.json()) as T;
 }
 
-async function postJson<T>(path: string, payload: unknown): Promise<T> {
+async function sendJson<T>(
+  path: string,
+  method: "POST" | "PATCH",
+  payload: unknown
+): Promise<T> {
   const response = await fetch(`${serverBaseUrl}${path}`, {
-    method: "POST",
+    method,
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(payload)
   });
@@ -61,6 +69,10 @@ async function postJson<T>(path: string, payload: unknown): Promise<T> {
   }
 
   return (await response.json()) as T;
+}
+
+function postJson<T>(path: string, payload: unknown): Promise<T> {
+  return sendJson<T>(path, "POST", payload);
 }
 
 export function getServerBaseUrl(): string {
@@ -110,4 +122,47 @@ export function regenerateDraft(conversationId: number, draftId: number) {
 
 export function ignoreDraft(conversationId: number, draftId: number) {
   return postJson<DraftResponse>(`/api/conversations/${conversationId}/drafts/${draftId}/ignore`, {});
+}
+
+export function getContact(conversationId: number, signal?: AbortSignal) {
+  return getJson<ContactResponse>(`/api/conversations/${conversationId}/contact`, signal);
+}
+
+export function updateContact(conversationId: number, patch: ContactUpdate) {
+  return sendJson<ContactResponse>(`/api/conversations/${conversationId}/contact`, "PATCH", patch);
+}
+
+export function getContactFacts(conversationId: number, signal?: AbortSignal) {
+  return getJson<MemoryFactsResponse>(
+    `/api/conversations/${conversationId}/contact/facts`,
+    signal
+  );
+}
+
+export function setContactFactStatus(
+  conversationId: number,
+  factId: number,
+  status: "confirmed" | "rejected"
+) {
+  return sendJson<{ fact: MemoryFact }>(
+    `/api/conversations/${conversationId}/contact/facts/${factId}`,
+    "PATCH",
+    { status }
+  );
+}
+
+export async function deleteContactFact(conversationId: number, factId: number) {
+  const response = await fetch(
+    `${serverBaseUrl}/api/conversations/${conversationId}/contact/facts/${factId}`,
+    { method: "DELETE", headers: { Accept: "application/json" } }
+  );
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as ApiErrorPayload;
+    throw new ApiError(
+      body.error?.message ?? `Request failed with status ${response.status}`,
+      response.status,
+      body.error?.code ?? null
+    );
+  }
 }

@@ -1,7 +1,47 @@
+import { eq } from "drizzle-orm";
 import { completeDraft, getDraftById, reserveDraft } from "../src/agent/drafting/draft.repository.js";
 import type { DraftRow } from "../src/agent/drafting/draft.types.js";
+import { db } from "../src/db/client.js";
+import { contacts, conversations, type Relationship, type ReplyMode } from "../src/db/schema.js";
 import { persistMessage } from "../src/messaging/persistence.js";
 import type { NormalizedMessage } from "../src/messaging/message.types.js";
+
+/**
+ * Overrides the contact policy on the contact behind a direct conversation. New contacts
+ * default to relationship=UNKNOWN / replyMode=OFF (Phase 7), which blocks drafting — most
+ * drafting/sendability fixtures need a contact that is explicitly allowed to draft.
+ */
+export function setConversationContactPolicy(
+  conversationId: number,
+  patch: { relationship?: Relationship; replyMode?: ReplyMode } = {
+    relationship: "FRIEND",
+    replyMode: "DRAFT"
+  }
+): void {
+  const conv = db
+    .select({ contactId: conversations.contactId })
+    .from(conversations)
+    .where(eq(conversations.id, conversationId))
+    .get();
+
+  if (conv?.contactId == null) {
+    throw new Error(`Conversation ${conversationId} has no contact to configure`);
+  }
+
+  db.update(contacts)
+    .set({ ...patch, updatedAt: new Date() })
+    .where(eq(contacts.id, conv.contactId))
+    .run();
+}
+
+/** Persists an incoming message and sets its contact to a draft-eligible policy. */
+export function persistDraftableIncoming(
+  overrides: Partial<NormalizedMessage> = {}
+): { conversationId: number; messageId: number } {
+  const result = persistMessage(makeMessage(overrides));
+  setConversationContactPolicy(result.conversationId!);
+  return { conversationId: result.conversationId!, messageId: result.messageId! };
+}
 
 export function makeMessage(
   overrides: Partial<NormalizedMessage> = {}
@@ -38,6 +78,7 @@ export function makeReadyDraft(
   const message = persistMessage(makeMessage(overrides));
   const conversationId = message.conversationId!;
   const triggerMessageId = message.messageId!;
+  setConversationContactPolicy(conversationId);
 
   const reserved = reserveDraft({
     conversationId,

@@ -1,11 +1,19 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { buildDraftContext } from "../src/agent/context/context.builder.js";
+import {
+  listFacts,
+  proposeFacts,
+  setFactStatus
+} from "../src/agent/memory/memory.repository.js";
 import { db } from "../src/db/client.js";
-import { contacts, conversations, messages } from "../src/db/schema.js";
+import { contacts, conversations, memoryFacts, messages } from "../src/db/schema.js";
 import { persistMessage } from "../src/messaging/persistence.js";
-import { makeMessage } from "./factories.js";
+import { getConversationContact } from "../src/messaging/queries.js";
+import type { NormalizedMessage } from "../src/messaging/message.types.js";
+import { makeMessage, persistDraftableIncoming } from "./factories.js";
 
 beforeEach(() => {
+  db.delete(memoryFacts).run();
   db.delete(messages).run();
   db.delete(conversations).run();
   db.delete(contacts).run();
@@ -141,5 +149,168 @@ describe("buildDraftContext", () => {
     );
 
     expect(() => buildDraftContext(result.conversationId!, result.messageId!, 20)).toThrow();
+  });
+});
+
+describe("style measurement excludes the AI's own output", () => {
+  /** Persists an outgoing message with the given origin. */
+  function outgoing(externalMessageId: string, text: string, origin: NormalizedMessage["origin"]) {
+    return persistMessage(
+      makeMessage({
+        externalMessageId,
+        text,
+        timestamp: 2_000 + externalMessageId.length,
+        direction: "outgoing",
+        origin,
+        sender: null
+      })
+    );
+  }
+
+  it("ignores AI_APPROVED replies when measuring style", () => {
+    const trigger = persistMessage(makeMessage({ externalMessageId: "t", timestamp: 1_000 }));
+
+    ["a", "bb", "ccc", "dddd", "eeeee"].forEach((text, i) =>
+      outgoing(`user-${i}`, text, "USER_PHONE")
+    );
+    for (let i = 0; i < 10; i += 1) {
+      outgoing(`ai-${i}`, "A much longer machine written reply 😏", "AI_APPROVED");
+    }
+
+    const context = buildDraftContext(trigger.conversationId!, trigger.messageId!, 20);
+
+    expect(context.style).toEqual({ sampleCount: 5, medianChars: 3, emojiRatio: 0 });
+    expect(context.exemplars?.every((e) => !e.reply.includes("machine written"))).toBe(true);
+  });
+
+  it("counts AI_EDITED replies, which carry the user's own corrections", () => {
+    const trigger = persistMessage(makeMessage({ externalMessageId: "t2", timestamp: 1_000 }));
+
+    ["a", "bb", "ccc", "dddd"].forEach((text, i) => outgoing(`u-${i}`, text, "USER_PHONE"));
+    outgoing("edited", "chal be", "AI_EDITED");
+
+    const context = buildDraftContext(trigger.conversationId!, trigger.messageId!, 20);
+
+    expect(context.style?.sampleCount).toBe(5);
+    expect(context.exemplars?.map((e) => e.reply)).toContain("chal be");
+  });
+
+  it("pairs each exemplar with the message it replied to", () => {
+    const trigger = persistMessage(
+      makeMessage({ externalMessageId: "q", text: "kya kar raha hai", timestamp: 1_000 })
+    );
+    outgoing("r", "kuch nahi bas", "USER_PHONE");
+
+    const context = buildDraftContext(trigger.conversationId!, trigger.messageId!, 20);
+
+    expect(context.exemplars).toContainEqual({
+      incoming: "kya kar raha hai",
+      reply: "kuch nahi bas"
+    });
+  });
+});
+
+describe("buildDraftContext memory", () => {
+  it("injects only confirmed facts, never proposed or rejected ones", () => {
+    const result = persistDraftableIncoming();
+    const contactId = getConversationContact(result.conversationId)!.contactId;
+
+    proposeFacts({
+      contactId,
+      facts: ["confirmed fact", "still proposed", "rejected fact"],
+      sourceMessageId: result.messageId,
+      promptVersion: "memory-extract@v1"
+    });
+
+    const stored = listFacts(contactId);
+    setFactStatus(contactId, stored[0]!.id, "confirmed");
+    setFactStatus(contactId, stored[2]!.id, "rejected");
+
+    const context = buildDraftContext(result.conversationId, result.messageId, 20);
+
+    expect(context.memory).toEqual(["confirmed fact"]);
+  });
+
+  it("is empty for a contact with no facts", () => {
+    const result = persistDraftableIncoming();
+    const context = buildDraftContext(result.conversationId, result.messageId, 20);
+
+    expect(context.memory).toEqual([]);
+  });
+});
+
+describe("buildDraftContext style snapshot", () => {
+  /** Seeds one incoming trigger plus the user's own replies, and builds the context. */
+  function withOutgoing(texts: string[], extra: () => void = () => {}) {
+    const trigger = persistMessage(
+      makeMessage({ externalMessageId: "trigger", timestamp: 1_000, text: "yo" })
+    );
+
+    texts.forEach((text, index) =>
+      persistMessage(
+        makeMessage({
+          externalMessageId: `out-${index}`,
+          timestamp: 2_000 + index,
+          text,
+          direction: "outgoing",
+          origin: "USER_PHONE",
+          sender: null
+        })
+      )
+    );
+
+    extra();
+
+    return buildDraftContext(trigger.conversationId!, trigger.messageId!, 20);
+  }
+
+  it("omits the snapshot when there is too little history to measure honestly", () => {
+    const context = withOutgoing(["a", "bb", "ccc", "dddd"]);
+    expect(context.style).toBeUndefined();
+  });
+
+  it("reports the median reply length once there are enough samples", () => {
+    const context = withOutgoing(["a", "bb", "ccc", "dddd", "eeeee"]);
+
+    expect(context.style).toEqual({ sampleCount: 5, medianChars: 3, emojiRatio: 0 });
+  });
+
+  it("averages the two middle lengths for an even sample count", () => {
+    const context = withOutgoing(["a", "bb", "ccc", "dddd", "eeeee", "ffffff"]);
+
+    expect(context.style?.sampleCount).toBe(6);
+    expect(context.style?.medianChars).toBe(4);
+  });
+
+  it("measures the share of replies carrying an emoji", () => {
+    const context = withOutgoing(["ok 🔥", "done ✅", "plain", "plain", "plain"]);
+
+    expect(context.style?.emojiRatio).toBeCloseTo(0.4);
+  });
+
+  it("measures only the user's own text replies, not the contact's or media", () => {
+    const context = withOutgoing(["a", "bb", "ccc", "dddd", "eeeee"], () => {
+      // Incoming chatter and an outgoing image must not count as style samples.
+      persistMessage(
+        makeMessage({ externalMessageId: "noise", timestamp: 3_000, text: "a".repeat(500) })
+      );
+      persistMessage(
+        makeMessage({
+          externalMessageId: "img",
+          timestamp: 3_001,
+          type: "unsupported",
+          text: null,
+          direction: "outgoing",
+          origin: "USER_PHONE",
+          sender: null,
+          metadata: {
+            rawRemoteJid: "919876543210@s.whatsapp.net",
+            baileysContentType: "imageMessage"
+          }
+        })
+      );
+    });
+
+    expect(context.style).toEqual({ sampleCount: 5, medianChars: 3, emojiRatio: 0 });
   });
 });

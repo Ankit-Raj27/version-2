@@ -55,6 +55,7 @@ describe("persistMessage", () => {
     expect(db.select().from(messages).all()).toHaveLength(2);
     expect(db.select().from(contacts).get()).toMatchObject({
       whatsappJid: "123@s.whatsapp.net",
+      relationship: "UNKNOWN",
       replyMode: "OFF"
     });
     expect(db.select().from(conversations).get()).toMatchObject({

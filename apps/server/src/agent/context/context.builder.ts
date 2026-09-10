@@ -1,12 +1,23 @@
 import {
   getConversationContact,
+  getOutgoingTextSamples,
   getRecentMessagesForContext,
-  type ContextMessageRow
+  getStyleExemplars,
+  type ContextMessageRow,
+  type StyleExemplar
 } from "../../messaging/queries.js";
-import type { ContextMessage, DraftContext } from "./context.types.js";
+import { listFacts } from "../memory/memory.repository.js";
+import type { ContextMessage, DraftContext, StyleSnapshot } from "./context.types.js";
 
 const PER_MESSAGE_CHAR_LIMIT = 1000;
 const TOTAL_CHAR_BUDGET = 6000;
+
+const STYLE_SAMPLE_LIMIT = 200;
+const EXEMPLAR_TARGET = 12;
+/** Below this a median and emoji ratio are noise; omit the snapshot instead. */
+const MIN_STYLE_SAMPLES = 5;
+
+const EMOJI = /\p{Extended_Pictographic}/u;
 
 const CONTENT_TYPE_PLACEHOLDERS: Record<string, string> = {
   imageMessage: "[image]",
@@ -68,6 +79,45 @@ function applyCharBudget(messages: ContextMessage[]): {
   return { messages: result, truncated };
 }
 
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+
+  return sorted.length % 2 === 0
+    ? Math.round((sorted[mid - 1]! + sorted[mid]!) / 2)
+    : sorted[mid]!;
+}
+
+function buildStyleSnapshot(conversationId: number): StyleSnapshot | undefined {
+  const samples = getOutgoingTextSamples(conversationId, STYLE_SAMPLE_LIMIT);
+
+  if (samples.length < MIN_STYLE_SAMPLES) {
+    return undefined;
+  }
+
+  return {
+    sampleCount: samples.length,
+    medianChars: median(samples.map((text) => text.length)),
+    emojiRatio: samples.filter((text) => EMOJI.test(text)).length / samples.length
+  };
+}
+
+/** Prefers this contact's own exchanges, topped up from elsewhere when it is thin. */
+function buildExemplars(conversationId: number): StyleExemplar[] {
+  const own = getStyleExemplars(conversationId, EXEMPLAR_TARGET);
+
+  if (own.length >= EXEMPLAR_TARGET) {
+    return own;
+  }
+
+  const seen = new Set(own.map((exemplar) => exemplar.reply));
+  const filler = getStyleExemplars(null, EXEMPLAR_TARGET * 3)
+    .filter((exemplar) => !seen.has(exemplar.reply))
+    .slice(-(EXEMPLAR_TARGET - own.length));
+
+  return [...filler, ...own];
+}
+
 export function buildDraftContext(
   conversationId: number,
   triggerMessageId: number,
@@ -116,6 +166,9 @@ export function buildDraftContext(
     },
     recentMessages: budgeted,
     triggerMessage,
+    style: buildStyleSnapshot(conversationId),
+    memory: listFacts(contact.contactId, "confirmed").map((row) => row.fact),
+    exemplars: buildExemplars(conversationId),
     meta: {
       requestedLimit,
       includedCount: budgeted.length,

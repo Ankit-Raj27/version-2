@@ -21,6 +21,7 @@ const STALE_REASON_MESSAGES: Record<string, string> = {
   newer_incoming_message: "A newer message has arrived — regenerate to reply.",
   manual_reply_detected: "You already replied to this from your phone.",
   already_replied: "Another reply has already been sent for this message.",
+  contact_policy_off: "This contact is no longer set to draft replies.",
   whatsapp_disconnected: "WhatsApp is not connected.",
   kill_switch_enabled: "Sending is disabled by the kill switch."
 };

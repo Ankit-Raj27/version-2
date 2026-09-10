@@ -2,7 +2,14 @@
 
 import { useEffect, useRef } from "react";
 import { dayKey, formatDateSeparator } from "../lib/format";
-import type { Draft, MessagePageResponse } from "../lib/types";
+import type {
+  Contact,
+  ContactUpdate,
+  Draft,
+  MemoryFact,
+  MessagePageResponse
+} from "../lib/types";
+import { ContactSettings } from "./contact-settings";
 import { DraftPanel } from "./draft-panel";
 import { MessageBubble } from "./message-bubble";
 
@@ -24,12 +31,20 @@ export function ConversationView({
   draft,
   draftPending,
   draftActionError,
+  contact,
+  contactSaving,
+  contactError,
+  facts,
+  factsPending,
+  factsError,
   onBack,
   onRetry,
   onLoadOlder,
   onApproveDraft,
   onRegenerateDraft,
-  onIgnoreDraft
+  onIgnoreDraft,
+  onSaveContact,
+  onFactAction
 }: {
   selectedId: number | null;
   page: MessagePageResponse | null;
@@ -38,12 +53,20 @@ export function ConversationView({
   draft: Draft | null;
   draftPending: boolean;
   draftActionError: string | null;
+  contact: Contact | null;
+  contactSaving: boolean;
+  contactError: string | null;
+  facts: MemoryFact[];
+  factsPending: boolean;
+  factsError: string | null;
   onBack: () => void;
   onRetry: () => void;
   onLoadOlder: () => Promise<void>;
   onApproveDraft: (editedText?: string) => void;
   onRegenerateDraft: () => void;
   onIgnoreDraft: () => void;
+  onSaveContact: (patch: ContactUpdate) => void;
+  onFactAction: (factId: number, action: "confirmed" | "rejected" | "delete") => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const previousConversationId = useRef<number | null>(null);
@@ -93,7 +116,7 @@ export function ConversationView({
 
   return (
     <section className="flex min-w-0 flex-1 flex-col bg-[#09090b]">
-      <header className="flex min-h-14 items-center border-b border-zinc-800 bg-zinc-950/50 px-4">
+      <header className="relative flex min-h-14 items-center border-b border-zinc-800 bg-zinc-950/50 px-4">
         <button
           type="button"
           onClick={onBack}
@@ -111,6 +134,16 @@ export function ConversationView({
             </p>
           ) : null}
         </div>
+        <ContactSettings
+          contact={contact}
+          saving={contactSaving}
+          error={contactError}
+          onSave={onSaveContact}
+          facts={facts}
+          factsPending={factsPending}
+          factsError={factsError}
+          onFactAction={onFactAction}
+        />
       </header>
 
       {error ? (

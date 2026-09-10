@@ -1,6 +1,11 @@
 import { env } from "../../config/env.js";
-import { findMessageAfter, getMessageById } from "../../messaging/queries.js";
+import {
+  findMessageAfter,
+  getConversationContact,
+  getMessageById
+} from "../../messaging/queries.js";
 import { whatsappService } from "../../whatsapp/whatsapp.service.js";
+import { resolveContactPolicy } from "../policies/contact-policy.js";
 import type { DraftRow, DraftStatus } from "./draft.types.js";
 
 export type StaleReason =
@@ -15,6 +20,7 @@ export type StaleReason =
   | "newer_incoming_message"
   | "manual_reply_detected"
   | "already_replied"
+  | "contact_policy_off"
   | "whatsapp_disconnected"
   | "kill_switch_enabled";
 
@@ -79,6 +85,21 @@ export function checkDraftSendability(draft: DraftRow): SendabilityResult {
     }
 
     return stale("already_replied");
+  }
+
+  // Permission is re-checked at execution time, not only at generation time: if the
+  // contact was switched to OFF (or otherwise no longer draft-eligible) after this draft
+  // was generated, it must no longer be sendable. Not a permanent reason — re-enabling
+  // the contact makes the draft sendable again (subject to the TTL check above).
+  const contact = getConversationContact(draft.conversationId);
+  const policy = resolveContactPolicy({
+    relationship: contact?.relationship ?? null,
+    replyMode: contact?.replyMode ?? null,
+    conversationType: "direct"
+  });
+
+  if (policy.action !== "draft") {
+    return stale("contact_policy_off");
   }
 
   if (!whatsappService.getStatus().connected) {

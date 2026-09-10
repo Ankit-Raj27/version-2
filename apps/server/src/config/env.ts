@@ -17,7 +17,6 @@ const rawEnvSchema = z
     WHATSAPP_AUTH_DIR: z.string().min(1).default('../../data/whatsapp-auth'),
     WHATSAPP_KILL_SWITCH: z.stringbool().default(true),
 
-    // --- Phase 4: AI drafting ---
     AI_DRAFTING_ENABLED: z.stringbool().default(false),
     AI_API_KEY: z.string().min(1).optional(),
     AI_API_BASE_URL: z.url().default("https://api.openai.com/v1"),
@@ -25,18 +24,18 @@ const rawEnvSchema = z
     AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
     AI_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().default(512),
     AI_TEMPERATURE: z.coerce.number().min(0).max(2).default(0.6),
-    // Empty string omits the param entirely for models/providers that reject it outright
-    // (most non-reasoning OpenAI chat models, including the default gpt-4o-mini).
     AI_REASONING_EFFORT: z
       .enum(["", "minimal", "low", "medium", "high", "xhigh"])
       .default(""),
-    AI_CONTEXT_MESSAGE_LIMIT: z.coerce.number().int().min(10).max(50).default(20),
+    AI_CONTEXT_MESSAGE_LIMIT: z.coerce.number().int().min(10).max(50).default(30),
     AI_DRAFT_ALLOWED_JIDS: z.string().default(""),
 
-    // --- Phase 6: reliability ---
-    // A ready draft older than this can no longer be sent (the conversation has likely
-    // moved on); the dashboard offers a regenerate instead.
-    DRAFT_TTL_MS: z.coerce.number().int().positive().default(10 * 60 * 1000)
+    DRAFT_TTL_MS: z.coerce.number().int().positive().default(10 * 60 * 1000),
+
+ 
+    MEMORY_ENABLED: z.stringbool().default(false),
+    MEMORY_EXTRACT_EVERY_N_MESSAGES: z.coerce.number().int().min(1).default(10),
+    MEMORY_MAX_FACTS_PER_CONTACT: z.coerce.number().int().min(1).default(50)
   })
   .superRefine((data, ctx) => {
     if (data.AI_DRAFTING_ENABLED && !data.AI_API_KEY) {
@@ -44,6 +43,15 @@ const rawEnvSchema = z
         code: "custom",
         path: ["AI_API_KEY"],
         message: "AI_API_KEY is required when AI_DRAFTING_ENABLED is true"
+      });
+    }
+
+    if (data.MEMORY_ENABLED && !data.AI_DRAFTING_ENABLED) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["MEMORY_ENABLED"],
+        message:
+          "MEMORY_ENABLED requires AI_DRAFTING_ENABLED: extraction runs off the drafting pipeline and shares its AI client"
       });
     }
 
